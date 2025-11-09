@@ -231,6 +231,38 @@ cargo component build --release --target wasm32-wasip2
 wasm-tools validate target/wasm32-wasip2/release/compression_multiplexer.wasm
 ```
 
+### Benchmarks
+
+Performance benchmarks are available to compare algorithms and compression levels:
+
+```bash
+# Run all benchmarks
+cargo bench
+
+# Run specific benchmark group
+cargo bench -- compression-algorithms
+cargo bench -- compression-levels
+cargo bench -- decompression
+
+# Generate HTML reports
+cargo bench
+open target/criterion/report/index.html
+```
+
+**Benchmark groups:**
+- **compression-algorithms** - Compare DEFLATE, BZIP2, LZMA throughput
+- **compression-levels** - Test levels 1, 3, 6, 9 for each algorithm
+- **decompression** - Measure decompression performance
+- **data-types** - Test on random, repetitive, and text data
+- **roundtrip** - Full compress + decompress cycles
+
+See [benches/README.md](benches/README.md) for detailed benchmark documentation.
+
+**Expected Performance (10KB repetitive data):**
+- DEFLATE: ~50 MB/s compression, ~200 MB/s decompression, 12x ratio
+- BZIP2: ~10 MB/s compression, ~30 MB/s decompression, 18x ratio
+- LZMA: ~5 MB/s compression, ~50 MB/s decompression, 25x ratio
+
 ## Roadmap
 
 ### v0.1.0 (Current)
