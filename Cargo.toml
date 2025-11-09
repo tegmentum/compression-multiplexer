@@ -1,0 +1,33 @@
+[package]
+name = "compression-multiplexer"
+version = "0.1.0"
+edition = "2024"
+authors = ["Tegmentum"]
+license = "MIT"
+description = "Compression algorithm multiplexer for WebAssembly Component Model"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Compression implementations (temporary until Component Model supports named imports)
+flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
+bzip2-rs = "0.1"
+banzai = "0.1"
+lzma-rust2 = "0.15"
+
+# WIT bindings
+wit-bindgen = { version = "0.44", default-features = false, features = ["realloc"] }
+wit-bindgen-rt = { version = "0.44", default-features = false, features = ["bitflags"] }
+
+[package.metadata.component]
+package = "tegmentum:compression-multiplexer"
+
+[package.metadata.component.target]
+path = "wit"
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable link-time optimization
+strip = true        # Strip debug symbols
+codegen-units = 1   # Better optimization
