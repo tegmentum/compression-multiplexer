@@ -1,0 +1,191 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        run: cargo test --lib --verbose
+
+      - name: Run doc tests
+        run: cargo test --doc --verbose
+
+  build-component:
+    name: Build WASM Component
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          target: wasm32-wasip2
+
+      - name: Install cargo-component
+        run: cargo install cargo-component --locked
+
+      - name: Install wasm-tools
+        run: cargo install wasm-tools --locked
+
+      - name: Build component
+        run: cargo component build --release --target wasm32-wasip2
+
+      - name: Validate component
+        run: wasm-tools validate target/wasm32-wasip2/release/compression_multiplexer.wasm
+
+      - name: Check component size
+        run: |
+          SIZE=$(wc -c < target/wasm32-wasip2/release/compression_multiplexer.wasm)
+          echo "Component size: $SIZE bytes"
+          # Fail if component is larger than 350KB (with some headroom from 277KB)
+          if [ $SIZE -gt 358400 ]; then
+            echo "Component size exceeded 350KB limit!"
+            exit 1
+          fi
+
+      - name: Upload component artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compression-multiplexer-wasm
+          path: target/wasm32-wasip2/release/compression_multiplexer.wasm
+
+  lint:
+    name: Lint (clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          components: clippy
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  format:
+    name: Format (rustfmt)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  examples:
+    name: Build Examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Build all examples
+        run: cargo build --examples --release
+
+      - name: Run basic_usage example
+        run: cargo run --example basic_usage --release
+
+      - name: Run algorithm_selection example
+        run: cargo run --example algorithm_selection --release
+
+      - name: Run compression_levels example
+        run: cargo run --example compression_levels --release
+
+      - name: Run archive_provider_integration example
+        run: cargo run --example archive_provider_integration --release
+
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Run benchmarks
+        run: cargo bench --bench compression_bench -- --output-format bencher | tee output.txt
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          alert-threshold: '150%'
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run security audit
+        run: cargo audit
