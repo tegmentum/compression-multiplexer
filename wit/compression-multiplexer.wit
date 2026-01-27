@@ -23,6 +23,10 @@ interface compression-dispatcher {
         lzma,
         /// Zstandard compression
         zstd,
+        /// LZ4 compression (extremely fast)
+        lz4,
+        /// OpenZL compression (Meta's format-aware compression)
+        openzl,
     }
 
     /// Compressor resource

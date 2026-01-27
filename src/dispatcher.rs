@@ -116,18 +116,27 @@ mod tests {
     }
 
     #[test]
-    fn test_compressor_unsupported_algorithm() {
-        let compressor = Compressor::new(Algorithm::Zstd, 6);
-        let result = compressor.compress(vec![1, 2, 3]);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("not supported"));
+    fn test_lz4_compression() {
+        let compressor = Compressor::new(Algorithm::Lz4, 0);
+        let data = b"LZ4 fast compression! ".repeat(100).to_vec();
+        let compressed = compressor.compress(data.clone()).unwrap();
+        assert!(compressed.len() < data.len());
+
+        let decompressor = Decompressor::new(Algorithm::Lz4);
+        let decompressed = decompressor.decompress(compressed).unwrap();
+        assert_eq!(decompressed, data);
     }
 
     #[test]
-    fn test_decompressor_unsupported_algorithm() {
+    fn test_zstd_compression() {
+        let compressor = Compressor::new(Algorithm::Zstd, 6);
+        let data = b"Zstandard compression! ".repeat(100).to_vec();
+        let compressed = compressor.compress(data.clone()).unwrap();
+        assert!(compressed.len() < data.len());
+
         let decompressor = Decompressor::new(Algorithm::Zstd);
-        let result = decompressor.decompress(vec![1, 2, 3]);
-        assert!(result.is_err());
+        let decompressed = decompressor.decompress(compressed).unwrap();
+        assert_eq!(decompressed, data);
     }
 
     #[test]

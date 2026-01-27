@@ -18,6 +18,7 @@ fn main() -> Result<(), String> {
         (Algorithm::Deflate, "DEFLATE"),
         (Algorithm::Bzip2, "BZIP2"),
         (Algorithm::Lzma, "LZMA"),
+        (Algorithm::Openzl, "OpenZL"),
     ];
 
     for (algorithm, name) in algorithms {

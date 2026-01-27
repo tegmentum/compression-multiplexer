@@ -1,110 +1,146 @@
 // Compression Multiplexer
 //
 // Provides unified compression dispatcher that routes to multiple algorithms.
-// Currently uses built-in implementations until Component Model supports
-// importing the same interface multiple times with different names.
+// On WASM targets, exports Component Model interface.
+// On native targets, provides library access to compression providers.
 
+#[cfg(target_family = "wasm")]
 mod bindings;
+#[cfg(target_family = "wasm")]
 mod dispatcher;
-mod providers;
+
+mod openzl_ffi;
+pub mod providers;
 
 // Re-export for convenience
-pub use dispatcher::{Compressor, Decompressor, MultiplexerImpl};
-pub use providers::{Algorithm, CompressionProvider};
+pub use providers::{CompressionProvider, Algorithm};
 
-// Export the WIT bindings
+#[cfg(target_family = "wasm")]
+pub use dispatcher::{Compressor, Decompressor, MultiplexerImpl};
+
+// Export the WIT bindings for WASM targets
+#[cfg(target_family = "wasm")]
 bindings::export!(MultiplexerImpl with_types_in bindings);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bindings::exports::tegmentum::compression_multiplexer::compression_dispatcher::{
-        Guest, GuestCompressor, GuestDecompressor,
-    };
+    use providers::get_provider;
 
     #[test]
     fn test_supported_algorithms() {
-        let algos = MultiplexerImpl::supported_algorithms();
-        assert!(algos.len() >= 3); // At minimum: store, deflate, bzip2, lzma
-        assert!(algos.contains(&Algorithm::Store));
-        assert!(algos.contains(&Algorithm::Deflate));
+        let algos = providers::supported_algorithms();
+        // At minimum: store, deflate, bzip2, lzma, zstd, lz4
+        // OpenZL is only available on WASM
+        assert!(algos.len() >= 6);
     }
 
     #[test]
     fn test_algorithm_info() {
-        let info = MultiplexerImpl::algorithm_info(Algorithm::Deflate);
+        let info = providers::algorithm_description(Algorithm::Deflate);
         assert!(info.is_some());
         assert!(info.unwrap().contains("DEFLATE"));
     }
 
     #[test]
     fn test_store_passthrough() {
-        let compressor = Compressor::new(Algorithm::Store, 0);
+        let provider = get_provider(Algorithm::Store).unwrap();
         let data = b"Hello, World!";
-        let compressed = compressor.compress(data.to_vec()).unwrap();
+        let compressed = provider.compress(data, 0).unwrap();
         assert_eq!(compressed, data); // Store is pass-through
 
-        let decompressor = Decompressor::new(Algorithm::Store);
-        let decompressed = decompressor.decompress(compressed).unwrap();
+        let decompressed = provider.decompress(&compressed).unwrap();
         assert_eq!(decompressed, data);
     }
 
     #[test]
     fn test_deflate_roundtrip() {
-        let compressor = Compressor::new(Algorithm::Deflate, 6);
+        let provider = get_provider(Algorithm::Deflate).unwrap();
         let data = b"Hello, World! ".repeat(100); // Repetitive data compresses well
-        let compressed = compressor.compress(data.to_vec()).unwrap();
+        let compressed = provider.compress(&data, 6).unwrap();
         assert!(compressed.len() < data.len()); // Should be smaller
 
-        let decompressor = Decompressor::new(Algorithm::Deflate);
-        let decompressed = decompressor.decompress(compressed).unwrap();
+        let decompressed = provider.decompress(&compressed).unwrap();
         assert_eq!(decompressed, data);
     }
 
     #[test]
     fn test_bzip2_roundtrip() {
-        let compressor = Compressor::new(Algorithm::Bzip2, 6);
+        let provider = get_provider(Algorithm::Bzip2).unwrap();
         let data = b"BZIP2 compression test data. ".repeat(50);
-        let compressed = compressor.compress(data.to_vec()).unwrap();
+        let compressed = provider.compress(&data, 6).unwrap();
         assert!(compressed.len() < data.len());
 
-        let decompressor = Decompressor::new(Algorithm::Bzip2);
-        let decompressed = decompressor.decompress(compressed).unwrap();
+        let decompressed = provider.decompress(&compressed).unwrap();
         assert_eq!(decompressed, data);
     }
 
     #[test]
     fn test_lzma_roundtrip() {
-        let compressor = Compressor::new(Algorithm::Lzma, 6);
+        let provider = get_provider(Algorithm::Lzma).unwrap();
         let data = b"LZMA compression test. ".repeat(50);
-        let compressed = compressor.compress(data.to_vec()).unwrap();
+        let compressed = provider.compress(&data, 6).unwrap();
         assert!(compressed.len() < data.len());
 
-        let decompressor = Decompressor::new(Algorithm::Lzma);
-        let decompressed = decompressor.decompress(compressed).unwrap();
+        let decompressed = provider.decompress(&compressed).unwrap();
         assert_eq!(decompressed, data);
     }
 
     #[test]
-    fn test_unsupported_algorithm() {
-        // Zstd is not implemented yet (C dependencies)
-        let compressor = Compressor::new(Algorithm::Zstd, 6);
-        let result = compressor.compress(vec![1, 2, 3]);
+    fn test_lz4_roundtrip() {
+        let provider = get_provider(Algorithm::Lz4).unwrap();
+        let data = b"LZ4 is extremely fast! ".repeat(100);
+        let compressed = provider.compress(&data, 0).unwrap();
+        assert!(compressed.len() < data.len());
+
+        let decompressed = provider.decompress(&compressed).unwrap();
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_zstd_roundtrip() {
+        let provider = get_provider(Algorithm::Zstd).unwrap();
+        let data = b"Zstandard compression test data. ".repeat(100);
+        let compressed = provider.compress(&data, 6).unwrap();
+        assert!(compressed.len() < data.len());
+
+        let decompressed = provider.decompress(&compressed).unwrap();
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    #[cfg(target_family = "wasm")]
+    fn test_openzl_roundtrip() {
+        let provider = get_provider(Algorithm::Openzl).unwrap();
+        let data = b"OpenZL structured data test. ".repeat(50);
+        let compressed = provider.compress(&data, 6).unwrap();
+        assert!(compressed.len() < data.len());
+
+        let decompressed = provider.decompress(&compressed).unwrap();
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    #[cfg(not(target_family = "wasm"))]
+    fn test_openzl_not_available_on_native() {
+        let result = get_provider(Algorithm::Openzl);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("not supported"));
+        match result {
+            Err(msg) => assert!(msg.contains("WASM")),
+            Ok(_) => panic!("Expected error for OpenZL on native"),
+        }
     }
 
     #[test]
     fn test_compression_levels() {
         let data = b"Test data for compression levels. ".repeat(50);
+        let provider = get_provider(Algorithm::Deflate).unwrap();
 
         // Level 0 (fastest)
-        let comp0 = Compressor::new(Algorithm::Deflate, 0);
-        let compressed0 = comp0.compress(data.to_vec()).unwrap();
+        let compressed0 = provider.compress(&data, 0).unwrap();
 
         // Level 9 (best)
-        let comp9 = Compressor::new(Algorithm::Deflate, 9);
-        let compressed9 = comp9.compress(data.to_vec()).unwrap();
+        let compressed9 = provider.compress(&data, 9).unwrap();
 
         // Level 9 should generally produce smaller output
         // (though not guaranteed for all data)
@@ -115,8 +151,7 @@ mod tests {
         );
 
         // Both should decompress correctly
-        let decomp = Decompressor::new(Algorithm::Deflate);
-        assert_eq!(decomp.decompress(compressed0).unwrap(), data);
-        assert_eq!(decomp.decompress(compressed9).unwrap(), data);
+        assert_eq!(provider.decompress(&compressed0).unwrap(), data);
+        assert_eq!(provider.decompress(&compressed9).unwrap(), data);
     }
 }
