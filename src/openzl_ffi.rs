@@ -48,6 +48,7 @@ pub struct ZlDCtx {
 /// Compression parameters
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum ZlCParam {
     StickyParameters = 1,
     CompressionLevel = 2,
