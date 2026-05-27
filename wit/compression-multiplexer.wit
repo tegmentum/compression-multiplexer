@@ -75,3 +75,60 @@ interface compression-dispatcher {
     /// Returns human-readable description of the algorithm
     algorithm-info: func(algo: algorithm) -> option<string>;
 }
+
+/// Zstandard-specific extras — dictionary support and dictionary training.
+///
+/// Lives in a separate interface (not on `compression-dispatcher`) because
+/// these operations don't generalize across algorithms; dictionaries are a
+/// zstd-only concept and would be dead exports for bzip2/lzma/etc.
+///
+/// Consumers that don't need dict support can ignore this interface
+/// entirely; the `compression-dispatcher` covers vanilla compress/decompress
+/// for all algorithms including zstd.
+interface zstd-extras {
+    /// A loaded or trained zstd dictionary. Wraps the raw dictionary bytes
+    /// plus the implementation's prepared CDict/DDict state.
+    ///
+    /// Dictionaries are typically 16 KB to 100 KB and amortize well across
+    /// many compress() calls on related data (the same wire-format JSON
+    /// records, the same kind of source files, …), so callers usually
+    /// construct one and reuse it for many compress-with-dict calls.
+    resource zstd-dict {
+        /// Wrap a raw zstd dictionary. Accepts the output of
+        /// `train-dict` or a dictionary loaded from disk.
+        constructor(bytes: list<u8>);
+
+        /// Get the dictionary's 4-byte ID (the dictID embedded in the
+        /// dictionary header by libzstd). Returns 0 for "raw content"
+        /// dictionaries that don't carry an ID.
+        id: func() -> u32;
+
+        /// Get a copy of the raw dictionary bytes. Useful for serialization
+        /// or for passing the dictionary to a different process.
+        as-bytes: func() -> list<u8>;
+    }
+
+    /// One-shot compress with a dictionary. `level` is the standard zstd
+    /// compression level (1-22; 3 is the libzstd default).
+    compress-with-dict: func(input: list<u8>,
+                             dict: borrow<zstd-dict>,
+                             level: s32) -> result<list<u8>, string>;
+
+    /// One-shot decompress with a dictionary. The dictionary must match
+    /// the one used at compression time (verified via dictID for non-raw
+    /// dicts).
+    decompress-with-dict: func(input: list<u8>,
+                               dict: borrow<zstd-dict>) -> result<list<u8>, string>;
+
+    /// Train a dictionary from a collection of samples. Returns the raw
+    /// dictionary bytes; wrap with `zstd-dict.new` to use.
+    ///
+    /// Arguments:
+    /// - samples: the training data, typically 10-100x dict-size in total
+    /// - dict-size: target dictionary size in bytes (e.g. 16384 for a
+    ///   compact dict, 110000 for maximum quality)
+    ///
+    /// Errors if samples are empty or unsuitable for training.
+    train-dict: func(samples: list<list<u8>>, dict-size: u32)
+               -> result<list<u8>, string>;
+}

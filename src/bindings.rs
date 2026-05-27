@@ -804,6 +804,602 @@ pub mod exports {
                         * ::core::mem::size_of::<*const u8>()],
                 );
             }
+            /// Zstandard-specific extras — dictionary support and dictionary training.
+            ///
+            /// Lives in a separate interface (not on `compression-dispatcher`) because
+            /// these operations don't generalize across algorithms; dictionaries are a
+            /// zstd-only concept and would be dead exports for bzip2/lzma/etc.
+            ///
+            /// Consumers that don't need dict support can ignore this interface
+            /// entirely; the `compression-dispatcher` covers vanilla compress/decompress
+            /// for all algorithms including zstd.
+            #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+            pub mod zstd_extras {
+                #[used]
+                #[doc(hidden)]
+                static __FORCE_SECTION_REF: fn() = super::super::super::super::__link_custom_section_describing_imports;
+                use super::super::super::super::_rt;
+                /// A loaded or trained zstd dictionary. Wraps the raw dictionary bytes
+                /// plus the implementation's prepared CDict/DDict state.
+                ///
+                /// Dictionaries are typically 16 KB to 100 KB and amortize well across
+                /// many compress() calls on related data (the same wire-format JSON
+                /// records, the same kind of source files, …), so callers usually
+                /// construct one and reuse it for many compress-with-dict calls.
+                #[derive(Debug)]
+                #[repr(transparent)]
+                pub struct ZstdDict {
+                    handle: _rt::Resource<ZstdDict>,
+                }
+                type _ZstdDictRep<T> = Option<T>;
+                impl ZstdDict {
+                    /// Creates a new resource from the specified representation.
+                    ///
+                    /// This function will create a new resource handle by moving `val` onto
+                    /// the heap and then passing that heap pointer to the component model to
+                    /// create a handle. The owned handle is then returned as `ZstdDict`.
+                    pub fn new<T: GuestZstdDict>(val: T) -> Self {
+                        Self::type_guard::<T>();
+                        let val: _ZstdDictRep<T> = Some(val);
+                        let ptr: *mut _ZstdDictRep<T> = _rt::Box::into_raw(
+                            _rt::Box::new(val),
+                        );
+                        unsafe { Self::from_handle(T::_resource_new(ptr.cast())) }
+                    }
+                    /// Gets access to the underlying `T` which represents this resource.
+                    pub fn get<T: GuestZstdDict>(&self) -> &T {
+                        let ptr = unsafe { &*self.as_ptr::<T>() };
+                        ptr.as_ref().unwrap()
+                    }
+                    /// Gets mutable access to the underlying `T` which represents this
+                    /// resource.
+                    pub fn get_mut<T: GuestZstdDict>(&mut self) -> &mut T {
+                        let ptr = unsafe { &mut *self.as_ptr::<T>() };
+                        ptr.as_mut().unwrap()
+                    }
+                    /// Consumes this resource and returns the underlying `T`.
+                    pub fn into_inner<T: GuestZstdDict>(self) -> T {
+                        let ptr = unsafe { &mut *self.as_ptr::<T>() };
+                        ptr.take().unwrap()
+                    }
+                    #[doc(hidden)]
+                    pub unsafe fn from_handle(handle: u32) -> Self {
+                        Self {
+                            handle: unsafe { _rt::Resource::from_handle(handle) },
+                        }
+                    }
+                    #[doc(hidden)]
+                    pub fn take_handle(&self) -> u32 {
+                        _rt::Resource::take_handle(&self.handle)
+                    }
+                    #[doc(hidden)]
+                    pub fn handle(&self) -> u32 {
+                        _rt::Resource::handle(&self.handle)
+                    }
+                    #[doc(hidden)]
+                    fn type_guard<T: 'static>() {
+                        use core::any::TypeId;
+                        static mut LAST_TYPE: Option<TypeId> = None;
+                        unsafe {
+                            assert!(! cfg!(target_feature = "atomics"));
+                            let id = TypeId::of::<T>();
+                            match LAST_TYPE {
+                                Some(ty) => {
+                                    assert!(
+                                        ty == id, "cannot use two types with this resource type"
+                                    )
+                                }
+                                None => LAST_TYPE = Some(id),
+                            }
+                        }
+                    }
+                    #[doc(hidden)]
+                    pub unsafe fn dtor<T: 'static>(handle: *mut u8) {
+                        Self::type_guard::<T>();
+                        let _ = unsafe {
+                            _rt::Box::from_raw(handle as *mut _ZstdDictRep<T>)
+                        };
+                    }
+                    fn as_ptr<T: GuestZstdDict>(&self) -> *mut _ZstdDictRep<T> {
+                        ZstdDict::type_guard::<T>();
+                        T::_resource_rep(self.handle()).cast()
+                    }
+                }
+                /// A borrowed version of [`ZstdDict`] which represents a borrowed value
+                /// with the lifetime `'a`.
+                #[derive(Debug)]
+                #[repr(transparent)]
+                pub struct ZstdDictBorrow<'a> {
+                    rep: *mut u8,
+                    _marker: core::marker::PhantomData<&'a ZstdDict>,
+                }
+                impl<'a> ZstdDictBorrow<'a> {
+                    #[doc(hidden)]
+                    pub unsafe fn lift(rep: usize) -> Self {
+                        Self {
+                            rep: rep as *mut u8,
+                            _marker: core::marker::PhantomData,
+                        }
+                    }
+                    /// Gets access to the underlying `T` in this resource.
+                    pub fn get<T: GuestZstdDict>(&self) -> &T {
+                        let ptr = unsafe { &mut *self.as_ptr::<T>() };
+                        ptr.as_ref().unwrap()
+                    }
+                    fn as_ptr<T: 'static>(&self) -> *mut _ZstdDictRep<T> {
+                        ZstdDict::type_guard::<T>();
+                        self.rep.cast()
+                    }
+                }
+                unsafe impl _rt::WasmResource for ZstdDict {
+                    #[inline]
+                    unsafe fn drop(_handle: u32) {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        unreachable!();
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            #[link(
+                                wasm_import_module = "[export]tegmentum:compression-multiplexer/zstd-extras@0.1.0"
+                            )]
+                            unsafe extern "C" {
+                                #[link_name = "[resource-drop]zstd-dict"]
+                                fn drop(_: u32);
+                            }
+                            unsafe { drop(_handle) };
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_constructor_zstd_dict_cabi<T: GuestZstdDict>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                ) -> i32 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let result1 = ZstdDict::new(
+                        T::new(_rt::Vec::from_raw_parts(arg0.cast(), len0, len0)),
+                    );
+                    (result1).take_handle() as i32
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_method_zstd_dict_id_cabi<T: GuestZstdDict>(
+                    arg0: *mut u8,
+                ) -> i32 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::id(
+                        unsafe { ZstdDictBorrow::lift(arg0 as u32 as usize) }.get(),
+                    );
+                    _rt::as_i32(result0)
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_method_zstd_dict_as_bytes_cabi<T: GuestZstdDict>(
+                    arg0: *mut u8,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::as_bytes(
+                        unsafe { ZstdDictBorrow::lift(arg0 as u32 as usize) }.get(),
+                    );
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    let vec2 = (result0).into_boxed_slice();
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    ::core::mem::forget(vec2);
+                    *ptr1.add(::core::mem::size_of::<*const u8>()).cast::<usize>() = len2;
+                    *ptr1.add(0).cast::<*mut u8>() = ptr2.cast_mut();
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_method_zstd_dict_as_bytes<T: GuestZstdDict>(
+                    arg0: *mut u8,
+                ) {
+                    let l0 = *arg0.add(0).cast::<*mut u8>();
+                    let l1 = *arg0
+                        .add(::core::mem::size_of::<*const u8>())
+                        .cast::<usize>();
+                    let base2 = l0;
+                    let len2 = l1;
+                    _rt::cabi_dealloc(base2, len2 * 1, 1);
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_compress_with_dict_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i32,
+                    arg3: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let result1 = T::compress_with_dict(
+                        _rt::Vec::from_raw_parts(arg0.cast(), len0, len0),
+                        unsafe { ZstdDictBorrow::lift(arg2 as u32 as usize) },
+                        arg3,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec3 = (e).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec4 = (e.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_compress_with_dict<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 1, 1);
+                        }
+                        _ => {
+                            let l4 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l5 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l4, l5, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_decompress_with_dict_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let result1 = T::decompress_with_dict(
+                        _rt::Vec::from_raw_parts(arg0.cast(), len0, len0),
+                        unsafe { ZstdDictBorrow::lift(arg2 as u32 as usize) },
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec3 = (e).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec4 = (e.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_decompress_with_dict<T: Guest>(
+                    arg0: *mut u8,
+                ) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 1, 1);
+                        }
+                        _ => {
+                            let l4 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l5 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l4, l5, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_train_dict_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let base3 = arg0;
+                    let len3 = arg1;
+                    let mut result3 = _rt::Vec::with_capacity(len3);
+                    for i in 0..len3 {
+                        let base = base3
+                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                        let e3 = {
+                            let l0 = *base.add(0).cast::<*mut u8>();
+                            let l1 = *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len2 = l1;
+                            _rt::Vec::from_raw_parts(l0.cast(), len2, len2)
+                        };
+                        result3.push(e3);
+                    }
+                    _rt::cabi_dealloc(
+                        base3,
+                        len3 * (2 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result4 = T::train_dict(result3, arg2 as u32);
+                    let ptr5 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result4 {
+                        Ok(e) => {
+                            *ptr5.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec6 = (e).into_boxed_slice();
+                            let ptr6 = vec6.as_ptr().cast::<u8>();
+                            let len6 = vec6.len();
+                            ::core::mem::forget(vec6);
+                            *ptr5
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len6;
+                            *ptr5
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr6.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr5.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec7 = (e.into_bytes()).into_boxed_slice();
+                            let ptr7 = vec7.as_ptr().cast::<u8>();
+                            let len7 = vec7.len();
+                            ::core::mem::forget(vec7);
+                            *ptr5
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len7;
+                            *ptr5
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr7.cast_mut();
+                        }
+                    };
+                    ptr5
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_train_dict<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 1, 1);
+                        }
+                        _ => {
+                            let l4 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l5 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l4, l5, 1);
+                        }
+                    }
+                }
+                pub trait Guest {
+                    type ZstdDict: GuestZstdDict;
+                    /// One-shot compress with a dictionary. `level` is the standard zstd
+                    /// compression level (1-22; 3 is the libzstd default).
+                    fn compress_with_dict(
+                        input: _rt::Vec<u8>,
+                        dict: ZstdDictBorrow<'_>,
+                        level: i32,
+                    ) -> Result<_rt::Vec<u8>, _rt::String>;
+                    /// One-shot decompress with a dictionary. The dictionary must match
+                    /// the one used at compression time (verified via dictID for non-raw
+                    /// dicts).
+                    fn decompress_with_dict(
+                        input: _rt::Vec<u8>,
+                        dict: ZstdDictBorrow<'_>,
+                    ) -> Result<_rt::Vec<u8>, _rt::String>;
+                    /// Train a dictionary from a collection of samples. Returns the raw
+                    /// dictionary bytes; wrap with `zstd-dict.new` to use.
+                    ///
+                    /// Arguments:
+                    /// - samples: the training data, typically 10-100x dict-size in total
+                    /// - dict-size: target dictionary size in bytes (e.g. 16384 for a
+                    ///   compact dict, 110000 for maximum quality)
+                    ///
+                    /// Errors if samples are empty or unsuitable for training.
+                    fn train_dict(
+                        samples: _rt::Vec<_rt::Vec<u8>>,
+                        dict_size: u32,
+                    ) -> Result<_rt::Vec<u8>, _rt::String>;
+                }
+                pub trait GuestZstdDict: 'static {
+                    #[doc(hidden)]
+                    unsafe fn _resource_new(val: *mut u8) -> u32
+                    where
+                        Self: Sized,
+                    {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = val;
+                            unreachable!();
+                        }
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            #[link(
+                                wasm_import_module = "[export]tegmentum:compression-multiplexer/zstd-extras@0.1.0"
+                            )]
+                            unsafe extern "C" {
+                                #[link_name = "[resource-new]zstd-dict"]
+                                fn new(_: *mut u8) -> u32;
+                            }
+                            unsafe { new(val) }
+                        }
+                    }
+                    #[doc(hidden)]
+                    fn _resource_rep(handle: u32) -> *mut u8
+                    where
+                        Self: Sized,
+                    {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = handle;
+                            unreachable!();
+                        }
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            #[link(
+                                wasm_import_module = "[export]tegmentum:compression-multiplexer/zstd-extras@0.1.0"
+                            )]
+                            unsafe extern "C" {
+                                #[link_name = "[resource-rep]zstd-dict"]
+                                fn rep(_: u32) -> *mut u8;
+                            }
+                            unsafe { rep(handle) }
+                        }
+                    }
+                    /// Wrap a raw zstd dictionary. Accepts the output of
+                    /// `train-dict` or a dictionary loaded from disk.
+                    fn new(bytes: _rt::Vec<u8>) -> Self;
+                    /// Get the dictionary's 4-byte ID (the dictID embedded in the
+                    /// dictionary header by libzstd). Returns 0 for "raw content"
+                    /// dictionaries that don't carry an ID.
+                    fn id(&self) -> u32;
+                    /// Get a copy of the raw dictionary bytes. Useful for serialization
+                    /// or for passing the dictionary to a different process.
+                    fn as_bytes(&self) -> _rt::Vec<u8>;
+                }
+                #[doc(hidden)]
+                macro_rules! __export_tegmentum_compression_multiplexer_zstd_extras_0_1_0_cabi {
+                    ($ty:ident with_types_in $($path_to_types:tt)*) => {
+                        const _ : () = { #[unsafe (export_name =
+                        "tegmentum:compression-multiplexer/zstd-extras@0.1.0#[constructor]zstd-dict")]
+                        unsafe extern "C" fn export_constructor_zstd_dict(arg0 : * mut
+                        u8, arg1 : usize,) -> i32 { unsafe { $($path_to_types)*::
+                        _export_constructor_zstd_dict_cabi::<<$ty as $($path_to_types)*::
+                        Guest >::ZstdDict > (arg0, arg1) } } #[unsafe (export_name =
+                        "tegmentum:compression-multiplexer/zstd-extras@0.1.0#[method]zstd-dict.id")]
+                        unsafe extern "C" fn export_method_zstd_dict_id(arg0 : * mut u8,)
+                        -> i32 { unsafe { $($path_to_types)*::
+                        _export_method_zstd_dict_id_cabi::<<$ty as $($path_to_types)*::
+                        Guest >::ZstdDict > (arg0) } } #[unsafe (export_name =
+                        "tegmentum:compression-multiplexer/zstd-extras@0.1.0#[method]zstd-dict.as-bytes")]
+                        unsafe extern "C" fn export_method_zstd_dict_as_bytes(arg0 : *
+                        mut u8,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_method_zstd_dict_as_bytes_cabi::<<$ty as
+                        $($path_to_types)*:: Guest >::ZstdDict > (arg0) } } #[unsafe
+                        (export_name =
+                        "cabi_post_tegmentum:compression-multiplexer/zstd-extras@0.1.0#[method]zstd-dict.as-bytes")]
+                        unsafe extern "C" fn _post_return_method_zstd_dict_as_bytes(arg0
+                        : * mut u8,) { unsafe { $($path_to_types)*::
+                        __post_return_method_zstd_dict_as_bytes::<<$ty as
+                        $($path_to_types)*:: Guest >::ZstdDict > (arg0) } } #[unsafe
+                        (export_name =
+                        "tegmentum:compression-multiplexer/zstd-extras@0.1.0#compress-with-dict")]
+                        unsafe extern "C" fn export_compress_with_dict(arg0 : * mut u8,
+                        arg1 : usize, arg2 : i32, arg3 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_compress_with_dict_cabi::<$ty >
+                        (arg0, arg1, arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_tegmentum:compression-multiplexer/zstd-extras@0.1.0#compress-with-dict")]
+                        unsafe extern "C" fn _post_return_compress_with_dict(arg0 : * mut
+                        u8,) { unsafe { $($path_to_types)*::
+                        __post_return_compress_with_dict::<$ty > (arg0) } } #[unsafe
+                        (export_name =
+                        "tegmentum:compression-multiplexer/zstd-extras@0.1.0#decompress-with-dict")]
+                        unsafe extern "C" fn export_decompress_with_dict(arg0 : * mut u8,
+                        arg1 : usize, arg2 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_decompress_with_dict_cabi::<$ty >
+                        (arg0, arg1, arg2) } } #[unsafe (export_name =
+                        "cabi_post_tegmentum:compression-multiplexer/zstd-extras@0.1.0#decompress-with-dict")]
+                        unsafe extern "C" fn _post_return_decompress_with_dict(arg0 : *
+                        mut u8,) { unsafe { $($path_to_types)*::
+                        __post_return_decompress_with_dict::<$ty > (arg0) } } #[unsafe
+                        (export_name =
+                        "tegmentum:compression-multiplexer/zstd-extras@0.1.0#train-dict")]
+                        unsafe extern "C" fn export_train_dict(arg0 : * mut u8, arg1 :
+                        usize, arg2 : i32,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_train_dict_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
+                        (export_name =
+                        "cabi_post_tegmentum:compression-multiplexer/zstd-extras@0.1.0#train-dict")]
+                        unsafe extern "C" fn _post_return_train_dict(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_train_dict::<$ty >
+                        (arg0) } } const _ : () = { #[doc(hidden)] #[unsafe (export_name
+                        =
+                        "tegmentum:compression-multiplexer/zstd-extras@0.1.0#[dtor]zstd-dict")]
+                        #[allow(non_snake_case)] unsafe extern "C" fn dtor(rep : * mut
+                        u8) { unsafe { $($path_to_types)*:: ZstdDict::dtor::< <$ty as
+                        $($path_to_types)*:: Guest >::ZstdDict > (rep) } } }; };
+                    };
+                }
+                #[doc(hidden)]
+                pub(crate) use __export_tegmentum_compression_multiplexer_zstd_extras_0_1_0_cabi;
+                #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                struct _RetArea(
+                    [::core::mem::MaybeUninit<
+                        u8,
+                    >; 3 * ::core::mem::size_of::<*const u8>()],
+                );
+                static mut _RET_AREA: _RetArea = _RetArea(
+                    [::core::mem::MaybeUninit::uninit(); 3
+                        * ::core::mem::size_of::<*const u8>()],
+                );
+            }
         }
     }
 }
@@ -899,6 +1495,65 @@ mod _rt {
     }
     pub use alloc_crate::string::String;
     pub use alloc_crate::alloc;
+    pub fn as_i32<T: AsI32>(t: T) -> i32 {
+        t.as_i32()
+    }
+    pub trait AsI32 {
+        fn as_i32(self) -> i32;
+    }
+    impl<'a, T: Copy + AsI32> AsI32 for &'a T {
+        fn as_i32(self) -> i32 {
+            (*self).as_i32()
+        }
+    }
+    impl AsI32 for i32 {
+        #[inline]
+        fn as_i32(self) -> i32 {
+            self as i32
+        }
+    }
+    impl AsI32 for u32 {
+        #[inline]
+        fn as_i32(self) -> i32 {
+            self as i32
+        }
+    }
+    impl AsI32 for i16 {
+        #[inline]
+        fn as_i32(self) -> i32 {
+            self as i32
+        }
+    }
+    impl AsI32 for u16 {
+        #[inline]
+        fn as_i32(self) -> i32 {
+            self as i32
+        }
+    }
+    impl AsI32 for i8 {
+        #[inline]
+        fn as_i32(self) -> i32 {
+            self as i32
+        }
+    }
+    impl AsI32 for u8 {
+        #[inline]
+        fn as_i32(self) -> i32 {
+            self as i32
+        }
+    }
+    impl AsI32 for char {
+        #[inline]
+        fn as_i32(self) -> i32 {
+            self as i32
+        }
+    }
+    impl AsI32 for usize {
+        #[inline]
+        fn as_i32(self) -> i32 {
+            self as i32
+        }
+    }
     extern crate alloc as alloc_crate;
 }
 /// Generates `#[unsafe(no_mangle)]` functions to export the specified type as
@@ -928,6 +1583,10 @@ macro_rules! __export_compression_multiplexer_impl {
         exports::tegmentum::compression_multiplexer::compression_dispatcher::__export_tegmentum_compression_multiplexer_compression_dispatcher_0_1_0_cabi!($ty
         with_types_in $($path_to_types_root)*::
         exports::tegmentum::compression_multiplexer::compression_dispatcher);
+        $($path_to_types_root)*::
+        exports::tegmentum::compression_multiplexer::zstd_extras::__export_tegmentum_compression_multiplexer_zstd_extras_0_1_0_cabi!($ty
+        with_types_in $($path_to_types_root)*::
+        exports::tegmentum::compression_multiplexer::zstd_extras);
     };
 }
 #[doc(inline)]
@@ -938,9 +1597,9 @@ pub(crate) use __export_compression_multiplexer_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 655] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x81\x04\x01A\x02\x01\
-A\x02\x01B\x18\x01m\x07\x05store\x07deflate\x05bzip2\x04lzma\x04zstd\x03lz4\x06o\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 994] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xd4\x06\x01A\x02\x01\
+A\x04\x01B\x18\x01m\x07\x05store\x07deflate\x05bzip2\x04lzma\x04zstd\x03lz4\x06o\
 penzl\x04\0\x09algorithm\x03\0\0\x04\0\x0acompressor\x03\x01\x04\0\x0cdecompress\
 or\x03\x01\x01i\x02\x01@\x02\x04algo\x01\x05level}\0\x04\x04\0\x17[constructor]c\
 ompressor\x01\x05\x01h\x02\x01p}\x01j\x01\x07\x01s\x01@\x02\x04self\x06\x05input\
@@ -949,10 +1608,17 @@ o\x01\0\x0a\x04\0\x19[constructor]decompressor\x01\x0b\x01h\x03\x01@\x02\x04self
 \x0c\x05input\x07\0\x08\x04\0\x1f[method]decompressor.decompress\x01\x0d\x01p\x01\
 \x01@\0\0\x0e\x04\0\x14supported-algorithms\x01\x0f\x01ks\x01@\x01\x04algo\x01\0\
 \x10\x04\0\x0ealgorithm-info\x01\x11\x04\0>tegmentum:compression-multiplexer/com\
-pression-dispatcher@0.1.0\x05\0\x04\0?tegmentum:compression-multiplexer/compress\
-ion-multiplexer@0.1.0\x04\0\x0b\x1d\x01\0\x17compression-multiplexer\x03\0\0\0G\x09\
-producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rus\
-t\x060.41.0";
+pression-dispatcher@0.1.0\x05\0\x01B\x12\x04\0\x09zstd-dict\x03\x01\x01p}\x01i\0\
+\x01@\x01\x05bytes\x01\0\x02\x04\0\x16[constructor]zstd-dict\x01\x03\x01h\0\x01@\
+\x01\x04self\x04\0y\x04\0\x14[method]zstd-dict.id\x01\x05\x01@\x01\x04self\x04\0\
+\x01\x04\0\x1a[method]zstd-dict.as-bytes\x01\x06\x01j\x01\x01\x01s\x01@\x03\x05i\
+nput\x01\x04dict\x04\x05levelz\0\x07\x04\0\x12compress-with-dict\x01\x08\x01@\x02\
+\x05input\x01\x04dict\x04\0\x07\x04\0\x14decompress-with-dict\x01\x09\x01p\x01\x01\
+@\x02\x07samples\x0a\x09dict-sizey\0\x07\x04\0\x0atrain-dict\x01\x0b\x04\03tegme\
+ntum:compression-multiplexer/zstd-extras@0.1.0\x05\x01\x04\0?tegmentum:compressi\
+on-multiplexer/compression-multiplexer@0.1.0\x04\0\x0b\x1d\x01\0\x17compression-\
+multiplexer\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x07\
+0.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

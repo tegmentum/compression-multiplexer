@@ -25,7 +25,7 @@ bzip2-rs = "0.1"
 banzai = "0.1"
 lzma-rust2 = "0.15"
 lz4_flex = "0.11"
-zstd = { version = "0.13", default-features = false }
+zstd = { version = "0.13", default-features = false, features = ["zdict_builder"] }
 
 # WIT bindings (optional for native library use)
 wit-bindgen = { version = "0.44", default-features = false, features = ["realloc"], optional = true }
@@ -34,7 +34,7 @@ wit-bindgen-rt = { version = "0.44", default-features = false, features = ["bitf
 [target.'cfg(target_family = "wasm")'.dependencies]
 wit-bindgen = { version = "0.44", default-features = false, features = ["realloc"] }
 wit-bindgen-rt = { version = "0.44", default-features = false, features = ["bitflags"] }
-zstd = { version = "0.13", default-features = false, features = ["wasm"] }
+zstd = { version = "0.13", default-features = false, features = ["wasm", "zdict_builder"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

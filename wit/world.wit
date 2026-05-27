@@ -9,4 +9,8 @@ world compression-multiplexer {
 
     // Export unified dispatcher
     export compression-dispatcher;
+
+    // Export zstd-specific extras (dict support, training). Consumers
+    // that don't need dicts can ignore this interface.
+    export zstd-extras;
 }

@@ -8,6 +8,8 @@
 mod bindings;
 #[cfg(target_family = "wasm")]
 mod dispatcher;
+#[cfg(target_family = "wasm")]
+mod zstd_extras;
 
 mod openzl_ffi;
 pub mod providers;
