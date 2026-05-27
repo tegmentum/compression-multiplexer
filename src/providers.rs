@@ -107,39 +107,49 @@ impl CompressionProvider for Bzip2Provider {
     }
 }
 
-/// LZMA provider
+/// LZMA provider.
+///
+/// Output container is `.xz` (RFC-7878 xz format) so the bytes interoperate
+/// with `xz`/`tar -J`/Python stdlib `lzma.FORMAT_XZ` and `.tar.xz` tarballs.
+/// Previously this used `LzmaWriter::new_use_header` which produces the
+/// legacy `.lzma` "alone" container; that's nearly extinct in the modern
+/// ecosystem (pip wheel source dists, system tarballs, GitHub release
+/// assets are all `.xz`), so the shape change is a net improvement.
+/// Consumers get the LZMA codec for the price of an industry-standard
+/// container.
 pub struct LzmaProvider;
 
 impl CompressionProvider for LzmaProvider {
     fn compress(&self, input: &[u8], level: u8) -> Result<Vec<u8>, String> {
-        use lzma_rust2::{LzmaOptions, LzmaWriter};
+        use lzma_rust2::{XzOptions, XzWriter};
 
         let level = level.min(9);
-        let output = Vec::new();
-        let options = LzmaOptions::with_preset(level as u32);
+        let options = XzOptions::with_preset(level as u32);
 
-        let mut encoder = LzmaWriter::new_use_header(output, &options, Some(input.len() as u64))
-            .map_err(|e| format!("LZMA encoder creation failed: {}", e))?;
+        let mut encoder = XzWriter::new(Vec::new(), options)
+            .map_err(|e| format!("XZ encoder creation failed: {}", e))?;
 
         encoder
             .write_all(input)
-            .map_err(|e| format!("LZMA compression failed: {}", e))?;
+            .map_err(|e| format!("XZ compression failed: {}", e))?;
 
         encoder
             .finish()
-            .map_err(|e| format!("LZMA finish failed: {}", e))
+            .map_err(|e| format!("XZ finish failed: {}", e))
     }
 
     fn decompress(&self, input: &[u8]) -> Result<Vec<u8>, String> {
-        use lzma_rust2::LzmaReader;
+        use lzma_rust2::XzReader;
 
-        let mut decoder = LzmaReader::new_mem_limit(input, 64 * 1024, None)
-            .map_err(|e| format!("LZMA decoder creation failed: {}", e))?;
+        // allow_multiple_streams=true matches stdlib lzma's FORMAT_AUTO
+        // semantic (xz files may contain concatenated streams; .tar.xz
+        // tarballs sometimes do).
+        let mut decoder = XzReader::new(input, true);
         let mut output = Vec::new();
 
         decoder
             .read_to_end(&mut output)
-            .map_err(|e| format!("LZMA decompression failed: {}", e))?;
+            .map_err(|e| format!("XZ decompression failed: {}", e))?;
 
         Ok(output)
     }

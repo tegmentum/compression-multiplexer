@@ -8,6 +8,32 @@ use crate::bindings::exports::tegmentum::compression_multiplexer::compression_di
 };
 use crate::providers::{self, CompressionProvider};
 
+/// Convert WIT-generated Algorithm to internal providers::Algorithm
+fn to_internal_algorithm(algo: Algorithm) -> providers::Algorithm {
+    match algo {
+        Algorithm::Store => providers::Algorithm::Store,
+        Algorithm::Deflate => providers::Algorithm::Deflate,
+        Algorithm::Bzip2 => providers::Algorithm::Bzip2,
+        Algorithm::Lzma => providers::Algorithm::Lzma,
+        Algorithm::Zstd => providers::Algorithm::Zstd,
+        Algorithm::Lz4 => providers::Algorithm::Lz4,
+        Algorithm::Openzl => providers::Algorithm::Openzl,
+    }
+}
+
+/// Convert internal providers::Algorithm to WIT-generated Algorithm
+fn to_wit_algorithm(algo: providers::Algorithm) -> Algorithm {
+    match algo {
+        providers::Algorithm::Store => Algorithm::Store,
+        providers::Algorithm::Deflate => Algorithm::Deflate,
+        providers::Algorithm::Bzip2 => Algorithm::Bzip2,
+        providers::Algorithm::Lzma => Algorithm::Lzma,
+        providers::Algorithm::Zstd => Algorithm::Zstd,
+        providers::Algorithm::Lz4 => Algorithm::Lz4,
+        providers::Algorithm::Openzl => Algorithm::Openzl,
+    }
+}
+
 /// Compressor resource implementation
 pub struct Compressor {
     provider: Option<Box<dyn CompressionProvider>>,
@@ -27,7 +53,7 @@ impl GuestCompressor for Compressor {
         }
 
         // Get provider for algorithm
-        match providers::get_provider(algorithm) {
+        match providers::get_provider(to_internal_algorithm(algorithm)) {
             Ok(provider) => Compressor {
                 provider: Some(provider),
                 level,
@@ -64,7 +90,7 @@ pub struct Decompressor {
 impl GuestDecompressor for Decompressor {
     fn new(algorithm: Algorithm) -> Self {
         // Get provider for algorithm
-        match providers::get_provider(algorithm) {
+        match providers::get_provider(to_internal_algorithm(algorithm)) {
             Ok(provider) => Decompressor {
                 provider: Some(provider),
                 error: None,
@@ -96,10 +122,13 @@ impl Guest for MultiplexerImpl {
 
     fn supported_algorithms() -> Vec<Algorithm> {
         providers::supported_algorithms()
+            .into_iter()
+            .map(to_wit_algorithm)
+            .collect()
     }
 
     fn algorithm_info(algo: Algorithm) -> Option<String> {
-        providers::algorithm_description(algo)
+        providers::algorithm_description(to_internal_algorithm(algo))
     }
 }
 

@@ -8,15 +8,15 @@ description = "Compression algorithm multiplexer for WebAssembly Component Model
 build = "build.rs"
 
 [lib]
-crate-type = ["rlib"]
+# rlib for native library use (benches, examples); cdylib for `cargo
+# component build --target wasm32-wasip2` to produce the .wasm component
+# artifact wit-bindgen wraps.
+crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
-# Enable WebAssembly Component Model support (cdylib output)
+# Enable WebAssembly Component Model support (adds cdylib output)
 component = []
-
-[target.'cfg(target_family = "wasm")'.lib]
-crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Compression implementations
@@ -48,6 +48,7 @@ package = "tegmentum:compression-multiplexer"
 
 [package.metadata.component.target]
 path = "wit"
+world = "compression-multiplexer"
 
 [profile.release]
 opt-level = "z"     # Optimize for size
