@@ -7,9 +7,17 @@
 // dead variants for bzip2/lzma/etc.
 
 use crate::bindings::exports::tegmentum::compression_multiplexer::zstd_extras::{
-    Guest, GuestZstdDict, ZstdDictBorrow,
+    Guest, GuestZstdDict, ZstdDictBorrow, ZstdParam,
 };
 use crate::dispatcher::MultiplexerImpl;
+
+// Raw FFI to libzstd for the operations zstd-safe doesn't wrap cleanly:
+//   * ZDICT_finalizeDictionary (experimental in zstd-safe, behind a feature)
+//   * ZSTD_CCtx_setParameter + ZSTD_compress2 (parameter API; zstd-safe wraps
+//     them but via typed enums that don't pass through the Python integer IDs
+//     stdlib expects). We use raw FFI to keep the WIT contract "(id, value)
+//     pair" tied directly to libzstd's stable C enum values.
+use zstd::zstd_safe::zstd_sys;
 
 /// A zstd dictionary, wrapping the raw bytes. We keep them owned (rather
 /// than caching a prepared CDict/DDict pair) because the WIT resource has
@@ -82,6 +90,218 @@ impl Guest for MultiplexerImpl {
         }
         zstd::dict::from_samples(&samples, dict_size as usize)
             .map_err(|e| format!("zstd train-dict failed: {}", e))
+    }
+
+    /// Refine a custom content dictionary with sample statistics
+    /// (libzstd's ZDICT_finalizeDictionary). zstd-safe doesn't wrap this
+    /// non-experimentally, so we go through the raw FFI.
+    fn finalize_dict(
+        dict_content: Vec<u8>,
+        samples: Vec<Vec<u8>>,
+        dict_size: u32,
+        level: i32,
+    ) -> Result<Vec<u8>, String> {
+        if samples.is_empty() {
+            return Err("finalize-dict: no samples provided".into());
+        }
+        let dict_size = dict_size as usize;
+        // libzstd requires dict_size >= max(dict_content_len, ZDICT_DICTSIZE_MIN=256).
+        if dict_size < dict_content.len() {
+            return Err(format!(
+                "finalize-dict: dict_size ({}) must be >= dict_content size ({})",
+                dict_size, dict_content.len()
+            ));
+        }
+        // Concatenate samples + collect sizes in a parallel Vec.
+        let nb_samples = samples.len();
+        let total: usize = samples.iter().map(|s| s.len()).sum();
+        let mut samples_buf = Vec::with_capacity(total);
+        let mut sizes = Vec::with_capacity(nb_samples);
+        for s in &samples {
+            samples_buf.extend_from_slice(s);
+            sizes.push(s.len());
+        }
+        let mut dst = vec![0u8; dict_size];
+        // ZDICT_params_t: compressionLevel, notificationLevel=0, dictID=0 (auto).
+        let params = zstd_sys::ZDICT_params_t {
+            compressionLevel: level,
+            notificationLevel: 0,
+            dictID: 0,
+        };
+        let result = unsafe {
+            zstd_sys::ZDICT_finalizeDictionary(
+                dst.as_mut_ptr() as *mut core::ffi::c_void,
+                dict_size,
+                dict_content.as_ptr() as *const core::ffi::c_void,
+                dict_content.len(),
+                samples_buf.as_ptr() as *const core::ffi::c_void,
+                sizes.as_ptr(),
+                nb_samples as core::ffi::c_uint,
+                params,
+            )
+        };
+        // ZDICT_isError(): top bits set indicate error; the magic check matches
+        // the C macro `if (ZDICT_isError(rc)) ...`. (Actually it's
+        // `code > -ZSTD_error_maxCode` after casting to ssize_t, but the
+        // simpler test that always works is the official ZDICT_isError function.)
+        let is_err = unsafe { zstd_sys::ZDICT_isError(result) };
+        if is_err != 0 {
+            let name_ptr = unsafe { zstd_sys::ZDICT_getErrorName(result) };
+            let name = if name_ptr.is_null() {
+                "unknown".to_string()
+            } else {
+                unsafe { core::ffi::CStr::from_ptr(name_ptr) }
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            return Err(format!("finalize-dict failed: {}", name));
+        }
+        dst.truncate(result);
+        Ok(dst)
+    }
+
+    /// libzstd's ZSTD_findFrameCompressedSize — size of one frame in bytes.
+    fn get_frame_size(frame: Vec<u8>) -> Result<u64, String> {
+        zstd::zstd_safe::find_frame_compressed_size(&frame)
+            .map_err(|code| format!("find_frame_compressed_size error code: {}", code))
+            .map(|sz| sz as u64)
+    }
+
+    /// Advanced compress: build a CCtx, push each (id, value) param,
+    /// then ZSTD_compress2. Level applied last so it wins over a same-named
+    /// param entry.
+    fn compress_advanced(
+        input: Vec<u8>,
+        level: i32,
+        params: Vec<ZstdParam>,
+    ) -> Result<Vec<u8>, String> {
+        unsafe {
+            let cctx = zstd_sys::ZSTD_createCCtx();
+            if cctx.is_null() {
+                return Err("compress-advanced: ZSTD_createCCtx returned null".into());
+            }
+            // RAII via a scope guard pattern (manual free on every return).
+            let result = (|| -> Result<Vec<u8>, String> {
+                for p in &params {
+                    let rc = zstd_sys::ZSTD_CCtx_setParameter(
+                        cctx,
+                        core::mem::transmute(p.id),
+                        p.value,
+                    );
+                    if zstd_sys::ZSTD_isError(rc) != 0 {
+                        return Err(format!(
+                            "compress-advanced: setParameter(id={}, value={}) failed: {}",
+                            p.id, p.value, zstd_error_name(rc)
+                        ));
+                    }
+                }
+                // Level applied last so it overrides any same-named entry.
+                let rc = zstd_sys::ZSTD_CCtx_setParameter(
+                    cctx,
+                    zstd_sys::ZSTD_cParameter::ZSTD_c_compressionLevel,
+                    level,
+                );
+                if zstd_sys::ZSTD_isError(rc) != 0 {
+                    return Err(format!(
+                        "compress-advanced: setParameter(compressionLevel={}) failed: {}",
+                        level, zstd_error_name(rc)
+                    ));
+                }
+                let bound = zstd_sys::ZSTD_compressBound(input.len());
+                let mut dst = vec![0u8; bound];
+                let written = zstd_sys::ZSTD_compress2(
+                    cctx,
+                    dst.as_mut_ptr() as *mut core::ffi::c_void,
+                    dst.len(),
+                    input.as_ptr() as *const core::ffi::c_void,
+                    input.len(),
+                );
+                if zstd_sys::ZSTD_isError(written) != 0 {
+                    return Err(format!(
+                        "compress-advanced: ZSTD_compress2 failed: {}",
+                        zstd_error_name(written)
+                    ));
+                }
+                dst.truncate(written);
+                Ok(dst)
+            })();
+            zstd_sys::ZSTD_freeCCtx(cctx);
+            result
+        }
+    }
+
+    /// Advanced decompress: build a DCtx, push each param, then
+    /// ZSTD_decompressDCtx. The DCtx is required (not the streaming one)
+    /// because parameters are per-context.
+    fn decompress_advanced(
+        input: Vec<u8>,
+        params: Vec<ZstdParam>,
+    ) -> Result<Vec<u8>, String> {
+        unsafe {
+            let dctx = zstd_sys::ZSTD_createDCtx();
+            if dctx.is_null() {
+                return Err("decompress-advanced: ZSTD_createDCtx returned null".into());
+            }
+            let result = (|| -> Result<Vec<u8>, String> {
+                for p in &params {
+                    let rc = zstd_sys::ZSTD_DCtx_setParameter(
+                        dctx,
+                        core::mem::transmute(p.id),
+                        p.value,
+                    );
+                    if zstd_sys::ZSTD_isError(rc) != 0 {
+                        return Err(format!(
+                            "decompress-advanced: setParameter(id={}, value={}) failed: {}",
+                            p.id, p.value, zstd_error_name(rc)
+                        ));
+                    }
+                }
+                // Use ZSTD_getFrameContentSize to figure out output buffer size
+                // when known; otherwise over-estimate and cap.
+                let known = zstd_sys::ZSTD_getFrameContentSize(
+                    input.as_ptr() as *const core::ffi::c_void,
+                    input.len(),
+                );
+                // ZSTD_CONTENTSIZE_UNKNOWN = -1u64; ZSTD_CONTENTSIZE_ERROR = -2u64
+                let dst_cap = if known == u64::MAX || known == u64::MAX - 1 {
+                    (input.len().saturating_mul(20)).min(64 * 1024 * 1024).max(4096)
+                } else {
+                    known as usize
+                };
+                let mut dst = vec![0u8; dst_cap];
+                let written = zstd_sys::ZSTD_decompressDCtx(
+                    dctx,
+                    dst.as_mut_ptr() as *mut core::ffi::c_void,
+                    dst.len(),
+                    input.as_ptr() as *const core::ffi::c_void,
+                    input.len(),
+                );
+                if zstd_sys::ZSTD_isError(written) != 0 {
+                    return Err(format!(
+                        "decompress-advanced: ZSTD_decompressDCtx failed: {}",
+                        zstd_error_name(written)
+                    ));
+                }
+                dst.truncate(written);
+                Ok(dst)
+            })();
+            zstd_sys::ZSTD_freeDCtx(dctx);
+            result
+        }
+    }
+}
+
+/// Lift a libzstd error code into a printable name.
+fn zstd_error_name(code: usize) -> String {
+    unsafe {
+        let name_ptr = zstd_sys::ZSTD_getErrorName(code);
+        if name_ptr.is_null() {
+            format!("unknown error code {}", code)
+        } else {
+            core::ffi::CStr::from_ptr(name_ptr)
+                .to_string_lossy()
+                .into_owned()
+        }
     }
 }
 
