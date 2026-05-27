@@ -71,13 +71,14 @@ impl Guest for MultiplexerImpl {
         let dict_ref: &ZstdDict = dict.get();
         let mut decomp = zstd::bulk::Decompressor::with_dictionary(&dict_ref.bytes)
             .map_err(|e| format!("zstd decompressor (with-dict) init failed: {}", e))?;
-        // bulk::Decompressor::decompress(src, capacity) — we don't know the
-        // uncompressed size in advance for arbitrary frames, so over-estimate
-        // generously. The crate truncates the output Vec to the actual size.
-        // Cap at 64 MB to bound runaway allocations from malicious input.
-        let estimated = (input.len().saturating_mul(20)).min(64 * 1024 * 1024).max(4096);
+        // Allocate based on the frame's declared content size when available;
+        // fall back to a generous over-estimate. A static heuristic (e.g.
+        // 20× input.len) can severely under-size when a dictionary lets the
+        // frame compress at 100:1+, so reading the header is necessary for
+        // correctness, not just efficiency.
+        let cap = decompress_capacity(&input);
         decomp
-            .decompress(&input, estimated)
+            .decompress(&input, cap)
             .map_err(|e| format!("zstd decompress-with-dict failed: {}", e))
     }
 
@@ -230,6 +231,30 @@ impl Guest for MultiplexerImpl {
         }
     }
 
+    /// Advanced compress combined with a dictionary loaded into the CCtx.
+    /// Delegates to the shared `compress_advanced_with_dict_impl` below.
+    fn compress_advanced_with_dict(
+        input: Vec<u8>,
+        level: i32,
+        params: Vec<ZstdParam>,
+        dict: ZstdDictBorrow<'_>,
+    ) -> Result<Vec<u8>, String> {
+        let dict_ref: &ZstdDict = dict.get();
+        MultiplexerImpl::compress_advanced_with_dict_impl(
+            input, level, params, &dict_ref.bytes)
+    }
+
+    /// Advanced decompress combined with a dictionary loaded into the DCtx.
+    fn decompress_advanced_with_dict(
+        input: Vec<u8>,
+        params: Vec<ZstdParam>,
+        dict: ZstdDictBorrow<'_>,
+    ) -> Result<Vec<u8>, String> {
+        let dict_ref: &ZstdDict = dict.get();
+        MultiplexerImpl::decompress_advanced_with_dict_impl(
+            input, params, &dict_ref.bytes)
+    }
+
     /// Advanced decompress: build a DCtx, push each param, then
     /// ZSTD_decompressDCtx. The DCtx is required (not the streaming one)
     /// because parameters are per-context.
@@ -256,19 +281,7 @@ impl Guest for MultiplexerImpl {
                         ));
                     }
                 }
-                // Use ZSTD_getFrameContentSize to figure out output buffer size
-                // when known; otherwise over-estimate and cap.
-                let known = zstd_sys::ZSTD_getFrameContentSize(
-                    input.as_ptr() as *const core::ffi::c_void,
-                    input.len(),
-                );
-                // ZSTD_CONTENTSIZE_UNKNOWN = -1u64; ZSTD_CONTENTSIZE_ERROR = -2u64
-                let dst_cap = if known == u64::MAX || known == u64::MAX - 1 {
-                    (input.len().saturating_mul(20)).min(64 * 1024 * 1024).max(4096)
-                } else {
-                    known as usize
-                };
-                let mut dst = vec![0u8; dst_cap];
+                let mut dst = vec![0u8; decompress_capacity(&input)];
                 let written = zstd_sys::ZSTD_decompressDCtx(
                     dctx,
                     dst.as_mut_ptr() as *mut core::ffi::c_void,
@@ -291,6 +304,35 @@ impl Guest for MultiplexerImpl {
     }
 }
 
+/// Pick an output buffer size for one-shot decompress.
+///
+/// libzstd's `ZSTD_getFrameContentSize` reads the frame header. Three
+/// outcomes:
+///   * Known size: use exactly that (truncated to a 64 MB ceiling to keep
+///     malicious inputs from triggering huge allocations).
+///   * ZSTD_CONTENTSIZE_UNKNOWN (u64::MAX): encoder didn't embed FCS;
+///     fall back to a generous 20×input.len estimate with a 64 KB floor.
+///   * ZSTD_CONTENTSIZE_ERROR (u64::MAX-1): malformed header; return a
+///     small default so the actual decompress() call raises a clean error
+///     instead of allocating gigabytes.
+fn decompress_capacity(input: &[u8]) -> usize {
+    let known = unsafe {
+        zstd_sys::ZSTD_getFrameContentSize(
+            input.as_ptr() as *const core::ffi::c_void,
+            input.len(),
+        )
+    };
+    const CONTENTSIZE_ERROR: u64 = u64::MAX - 1;
+    const CAP: usize = 64 * 1024 * 1024;
+    if known == u64::MAX {
+        (input.len().saturating_mul(20)).min(CAP).max(64 * 1024)
+    } else if known == CONTENTSIZE_ERROR {
+        4096
+    } else {
+        (known as usize).min(CAP)
+    }
+}
+
 /// Lift a libzstd error code into a printable name.
 fn zstd_error_name(code: usize) -> String {
     unsafe {
@@ -301,6 +343,160 @@ fn zstd_error_name(code: usize) -> String {
             core::ffi::CStr::from_ptr(name_ptr)
                 .to_string_lossy()
                 .into_owned()
+        }
+    }
+}
+
+/// Shared CCtx setup: apply each (id, value) param, then apply `level`
+/// (which always wins over a same-id entry in `params`). Returns the
+/// first error code encountered, or 0 on success.
+unsafe fn apply_cctx_params(
+    cctx: *mut zstd_sys::ZSTD_CCtx,
+    level: i32,
+    params: &[ZstdParam],
+) -> Result<(), String> {
+    for p in params {
+        let rc = zstd_sys::ZSTD_CCtx_setParameter(
+            cctx,
+            core::mem::transmute(p.id),
+            p.value,
+        );
+        if zstd_sys::ZSTD_isError(rc) != 0 {
+            return Err(format!(
+                "setParameter(id={}, value={}) failed: {}",
+                p.id, p.value, zstd_error_name(rc)
+            ));
+        }
+    }
+    let rc = zstd_sys::ZSTD_CCtx_setParameter(
+        cctx,
+        zstd_sys::ZSTD_cParameter::ZSTD_c_compressionLevel,
+        level,
+    );
+    if zstd_sys::ZSTD_isError(rc) != 0 {
+        return Err(format!(
+            "setParameter(compressionLevel={}) failed: {}",
+            level, zstd_error_name(rc)
+        ));
+    }
+    Ok(())
+}
+
+unsafe fn apply_dctx_params(
+    dctx: *mut zstd_sys::ZSTD_DCtx,
+    params: &[ZstdParam],
+) -> Result<(), String> {
+    for p in params {
+        let rc = zstd_sys::ZSTD_DCtx_setParameter(
+            dctx,
+            core::mem::transmute(p.id),
+            p.value,
+        );
+        if zstd_sys::ZSTD_isError(rc) != 0 {
+            return Err(format!(
+                "setParameter(id={}, value={}) failed: {}",
+                p.id, p.value, zstd_error_name(rc)
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Compress with both advanced parameters AND a dictionary loaded into
+/// the CCtx (libzstd's ZSTD_CCtx_loadDictionary). Sits in the same
+/// trait impl block as the other Guest methods.
+impl MultiplexerImpl {
+    fn compress_advanced_with_dict_impl(
+        input: Vec<u8>,
+        level: i32,
+        params: Vec<ZstdParam>,
+        dict_bytes: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        unsafe {
+            let cctx = zstd_sys::ZSTD_createCCtx();
+            if cctx.is_null() {
+                return Err("ZSTD_createCCtx returned null".into());
+            }
+            let result = (|| -> Result<Vec<u8>, String> {
+                apply_cctx_params(cctx, level, &params)
+                    .map_err(|e| format!("compress-advanced-with-dict: {}", e))?;
+                let rc = zstd_sys::ZSTD_CCtx_loadDictionary(
+                    cctx,
+                    dict_bytes.as_ptr() as *const core::ffi::c_void,
+                    dict_bytes.len(),
+                );
+                if zstd_sys::ZSTD_isError(rc) != 0 {
+                    return Err(format!(
+                        "compress-advanced-with-dict: loadDictionary failed: {}",
+                        zstd_error_name(rc)
+                    ));
+                }
+                let bound = zstd_sys::ZSTD_compressBound(input.len());
+                let mut dst = vec![0u8; bound];
+                let written = zstd_sys::ZSTD_compress2(
+                    cctx,
+                    dst.as_mut_ptr() as *mut core::ffi::c_void,
+                    dst.len(),
+                    input.as_ptr() as *const core::ffi::c_void,
+                    input.len(),
+                );
+                if zstd_sys::ZSTD_isError(written) != 0 {
+                    return Err(format!(
+                        "compress-advanced-with-dict: ZSTD_compress2 failed: {}",
+                        zstd_error_name(written)
+                    ));
+                }
+                dst.truncate(written);
+                Ok(dst)
+            })();
+            zstd_sys::ZSTD_freeCCtx(cctx);
+            result
+        }
+    }
+
+    fn decompress_advanced_with_dict_impl(
+        input: Vec<u8>,
+        params: Vec<ZstdParam>,
+        dict_bytes: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        unsafe {
+            let dctx = zstd_sys::ZSTD_createDCtx();
+            if dctx.is_null() {
+                return Err("ZSTD_createDCtx returned null".into());
+            }
+            let result = (|| -> Result<Vec<u8>, String> {
+                apply_dctx_params(dctx, &params)
+                    .map_err(|e| format!("decompress-advanced-with-dict: {}", e))?;
+                let rc = zstd_sys::ZSTD_DCtx_loadDictionary(
+                    dctx,
+                    dict_bytes.as_ptr() as *const core::ffi::c_void,
+                    dict_bytes.len(),
+                );
+                if zstd_sys::ZSTD_isError(rc) != 0 {
+                    return Err(format!(
+                        "decompress-advanced-with-dict: loadDictionary failed: {}",
+                        zstd_error_name(rc)
+                    ));
+                }
+                let mut dst = vec![0u8; decompress_capacity(&input)];
+                let written = zstd_sys::ZSTD_decompressDCtx(
+                    dctx,
+                    dst.as_mut_ptr() as *mut core::ffi::c_void,
+                    dst.len(),
+                    input.as_ptr() as *const core::ffi::c_void,
+                    input.len(),
+                );
+                if zstd_sys::ZSTD_isError(written) != 0 {
+                    return Err(format!(
+                        "decompress-advanced-with-dict: ZSTD_decompressDCtx failed: {}",
+                        zstd_error_name(written)
+                    ));
+                }
+                dst.truncate(written);
+                Ok(dst)
+            })();
+            zstd_sys::ZSTD_freeDCtx(dctx);
+            result
         }
     }
 }

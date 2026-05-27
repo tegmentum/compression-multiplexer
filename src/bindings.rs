@@ -1554,6 +1554,162 @@ pub mod exports {
                         }
                     }
                 }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_compress_advanced_with_dict_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i32,
+                    arg3: *mut u8,
+                    arg4: usize,
+                    arg5: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let len1 = arg4;
+                    let result2 = T::compress_advanced_with_dict(
+                        _rt::Vec::from_raw_parts(arg0.cast(), len0, len0),
+                        arg2,
+                        _rt::Vec::from_raw_parts(arg3.cast(), len1, len1),
+                        unsafe { ZstdDictBorrow::lift(arg5 as u32 as usize) },
+                    );
+                    let ptr3 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result2 {
+                        Ok(e) => {
+                            *ptr3.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec4 = (e).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr3.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec5 = (e.into_bytes()).into_boxed_slice();
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            ::core::mem::forget(vec5);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                    };
+                    ptr3
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_compress_advanced_with_dict<T: Guest>(
+                    arg0: *mut u8,
+                ) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 1, 1);
+                        }
+                        _ => {
+                            let l4 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l5 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l4, l5, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_decompress_advanced_with_dict_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: *mut u8,
+                    arg3: usize,
+                    arg4: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let len1 = arg3;
+                    let result2 = T::decompress_advanced_with_dict(
+                        _rt::Vec::from_raw_parts(arg0.cast(), len0, len0),
+                        _rt::Vec::from_raw_parts(arg2.cast(), len1, len1),
+                        unsafe { ZstdDictBorrow::lift(arg4 as u32 as usize) },
+                    );
+                    let ptr3 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result2 {
+                        Ok(e) => {
+                            *ptr3.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec4 = (e).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr3.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec5 = (e.into_bytes()).into_boxed_slice();
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            ::core::mem::forget(vec5);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                    };
+                    ptr3
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_decompress_advanced_with_dict<T: Guest>(
+                    arg0: *mut u8,
+                ) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 1, 1);
+                        }
+                        _ => {
+                            let l4 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l5 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l4, l5, 1);
+                        }
+                    }
+                }
                 pub trait Guest {
                     type ZstdDict: GuestZstdDict;
                     /// One-shot compress with a dictionary. `level` is the standard zstd
@@ -1621,6 +1777,25 @@ pub mod exports {
                     fn decompress_advanced(
                         input: _rt::Vec<u8>,
                         params: _rt::Vec<ZstdParam>,
+                    ) -> Result<_rt::Vec<u8>, _rt::String>;
+                    /// Advanced compress + dictionary in one call. Equivalent to
+                    /// `compress-advanced` plus a `ZSTD_CCtx_loadDictionary` before
+                    /// the compress step. Lets callers tune both the codec parameters
+                    /// AND use a trained dictionary on the same payload, which the
+                    /// split `compress-advanced` / `compress-with-dict` paths can't
+                    /// do in one call.
+                    fn compress_advanced_with_dict(
+                        input: _rt::Vec<u8>,
+                        level: i32,
+                        params: _rt::Vec<ZstdParam>,
+                        dict: ZstdDictBorrow<'_>,
+                    ) -> Result<_rt::Vec<u8>, _rt::String>;
+                    /// Advanced decompress + dictionary in one call. Mirror of
+                    /// `compress-advanced-with-dict`.
+                    fn decompress_advanced_with_dict(
+                        input: _rt::Vec<u8>,
+                        params: _rt::Vec<ZstdParam>,
+                        dict: ZstdDictBorrow<'_>,
                     ) -> Result<_rt::Vec<u8>, _rt::String>;
                 }
                 pub trait GuestZstdDict: 'static {
@@ -1774,8 +1949,32 @@ pub mod exports {
                         "cabi_post_tegmentum:compression-multiplexer/zstd-extras@0.1.0#decompress-advanced")]
                         unsafe extern "C" fn _post_return_decompress_advanced(arg0 : *
                         mut u8,) { unsafe { $($path_to_types)*::
-                        __post_return_decompress_advanced::<$ty > (arg0) } } const _ : ()
-                        = { #[doc(hidden)] #[unsafe (export_name =
+                        __post_return_decompress_advanced::<$ty > (arg0) } } #[unsafe
+                        (export_name =
+                        "tegmentum:compression-multiplexer/zstd-extras@0.1.0#compress-advanced-with-dict")]
+                        unsafe extern "C" fn export_compress_advanced_with_dict(arg0 : *
+                        mut u8, arg1 : usize, arg2 : i32, arg3 : * mut u8, arg4 : usize,
+                        arg5 : i32,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_compress_advanced_with_dict_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3, arg4, arg5) } } #[unsafe (export_name =
+                        "cabi_post_tegmentum:compression-multiplexer/zstd-extras@0.1.0#compress-advanced-with-dict")]
+                        unsafe extern "C" fn
+                        _post_return_compress_advanced_with_dict(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*::
+                        __post_return_compress_advanced_with_dict::<$ty > (arg0) } }
+                        #[unsafe (export_name =
+                        "tegmentum:compression-multiplexer/zstd-extras@0.1.0#decompress-advanced-with-dict")]
+                        unsafe extern "C" fn export_decompress_advanced_with_dict(arg0 :
+                        * mut u8, arg1 : usize, arg2 : * mut u8, arg3 : usize, arg4 :
+                        i32,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_decompress_advanced_with_dict_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3, arg4) } } #[unsafe (export_name =
+                        "cabi_post_tegmentum:compression-multiplexer/zstd-extras@0.1.0#decompress-advanced-with-dict")]
+                        unsafe extern "C" fn
+                        _post_return_decompress_advanced_with_dict(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*::
+                        __post_return_decompress_advanced_with_dict::<$ty > (arg0) } }
+                        const _ : () = { #[doc(hidden)] #[unsafe (export_name =
                         "tegmentum:compression-multiplexer/zstd-extras@0.1.0#[dtor]zstd-dict")]
                         #[allow(non_snake_case)] unsafe extern "C" fn dtor(rep : * mut
                         u8) { unsafe { $($path_to_types)*:: ZstdDict::dtor::< <$ty as
@@ -2015,8 +2214,8 @@ pub(crate) use __export_compression_multiplexer_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1221] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xb7\x08\x01A\x02\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1346] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xb4\x09\x01A\x02\x01\
 A\x04\x01B\x18\x01m\x07\x05store\x07deflate\x05bzip2\x04lzma\x04zstd\x03lz4\x06o\
 penzl\x04\0\x09algorithm\x03\0\0\x04\0\x0acompressor\x03\x01\x04\0\x0cdecompress\
 or\x03\x01\x01i\x02\x01@\x02\x04algo\x01\x05level}\0\x04\x04\0\x17[constructor]c\
@@ -2026,22 +2225,25 @@ o\x01\0\x0a\x04\0\x19[constructor]decompressor\x01\x0b\x01h\x03\x01@\x02\x04self
 \x0c\x05input\x07\0\x08\x04\0\x1f[method]decompressor.decompress\x01\x0d\x01p\x01\
 \x01@\0\0\x0e\x04\0\x14supported-algorithms\x01\x0f\x01ks\x01@\x01\x04algo\x01\0\
 \x10\x04\0\x0ealgorithm-info\x01\x11\x04\0>tegmentum:compression-multiplexer/com\
-pression-dispatcher@0.1.0\x05\0\x01B\x1e\x04\0\x09zstd-dict\x03\x01\x01r\x02\x02\
-idy\x05valuez\x04\0\x0azstd-param\x03\0\x01\x01p}\x01i\0\x01@\x01\x05bytes\x03\0\
-\x04\x04\0\x16[constructor]zstd-dict\x01\x05\x01h\0\x01@\x01\x04self\x06\0y\x04\0\
-\x14[method]zstd-dict.id\x01\x07\x01@\x01\x04self\x06\0\x03\x04\0\x1a[method]zst\
-d-dict.as-bytes\x01\x08\x01j\x01\x03\x01s\x01@\x03\x05input\x03\x04dict\x06\x05l\
-evelz\0\x09\x04\0\x12compress-with-dict\x01\x0a\x01@\x02\x05input\x03\x04dict\x06\
-\0\x09\x04\0\x14decompress-with-dict\x01\x0b\x01p\x03\x01@\x02\x07samples\x0c\x09\
-dict-sizey\0\x09\x04\0\x0atrain-dict\x01\x0d\x01@\x04\x0cdict-content\x03\x07sam\
-ples\x0c\x09dict-sizey\x05levelz\0\x09\x04\0\x0dfinalize-dict\x01\x0e\x01j\x01w\x01\
-s\x01@\x01\x05frame\x03\0\x0f\x04\0\x0eget-frame-size\x01\x10\x01p\x02\x01@\x03\x05\
-input\x03\x05levelz\x06params\x11\0\x09\x04\0\x11compress-advanced\x01\x12\x01@\x02\
-\x05input\x03\x06params\x11\0\x09\x04\0\x13decompress-advanced\x01\x13\x04\03teg\
-mentum:compression-multiplexer/zstd-extras@0.1.0\x05\x01\x04\0?tegmentum:compres\
-sion-multiplexer/compression-multiplexer@0.1.0\x04\0\x0b\x1d\x01\0\x17compressio\
-n-multiplexer\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x07\
-0.227.1\x10wit-bindgen-rust\x060.41.0";
+pression-dispatcher@0.1.0\x05\0\x01B\"\x04\0\x09zstd-dict\x03\x01\x01r\x02\x02id\
+y\x05valuez\x04\0\x0azstd-param\x03\0\x01\x01p}\x01i\0\x01@\x01\x05bytes\x03\0\x04\
+\x04\0\x16[constructor]zstd-dict\x01\x05\x01h\0\x01@\x01\x04self\x06\0y\x04\0\x14\
+[method]zstd-dict.id\x01\x07\x01@\x01\x04self\x06\0\x03\x04\0\x1a[method]zstd-di\
+ct.as-bytes\x01\x08\x01j\x01\x03\x01s\x01@\x03\x05input\x03\x04dict\x06\x05level\
+z\0\x09\x04\0\x12compress-with-dict\x01\x0a\x01@\x02\x05input\x03\x04dict\x06\0\x09\
+\x04\0\x14decompress-with-dict\x01\x0b\x01p\x03\x01@\x02\x07samples\x0c\x09dict-\
+sizey\0\x09\x04\0\x0atrain-dict\x01\x0d\x01@\x04\x0cdict-content\x03\x07samples\x0c\
+\x09dict-sizey\x05levelz\0\x09\x04\0\x0dfinalize-dict\x01\x0e\x01j\x01w\x01s\x01\
+@\x01\x05frame\x03\0\x0f\x04\0\x0eget-frame-size\x01\x10\x01p\x02\x01@\x03\x05in\
+put\x03\x05levelz\x06params\x11\0\x09\x04\0\x11compress-advanced\x01\x12\x01@\x02\
+\x05input\x03\x06params\x11\0\x09\x04\0\x13decompress-advanced\x01\x13\x01@\x04\x05\
+input\x03\x05levelz\x06params\x11\x04dict\x06\0\x09\x04\0\x1bcompress-advanced-w\
+ith-dict\x01\x14\x01@\x03\x05input\x03\x06params\x11\x04dict\x06\0\x09\x04\0\x1d\
+decompress-advanced-with-dict\x01\x15\x04\03tegmentum:compression-multiplexer/zs\
+td-extras@0.1.0\x05\x01\x04\0?tegmentum:compression-multiplexer/compression-mult\
+iplexer@0.1.0\x04\0\x0b\x1d\x01\0\x17compression-multiplexer\x03\0\0\0G\x09produ\
+cers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x06\
+0.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {
