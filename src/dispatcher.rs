@@ -4,7 +4,7 @@
 // requests to the appropriate compression provider.
 
 use crate::bindings::exports::tegmentum::compression_multiplexer::compression_dispatcher::{
-    Algorithm, Guest, GuestCompressor, GuestDecompressor,
+    Algorithm, DecompressResult, Guest, GuestCompressor, GuestDecompressor,
 };
 use crate::providers::{self, CompressionProvider};
 
@@ -110,6 +110,18 @@ impl GuestDecompressor for Decompressor {
 
         // Provider must exist if no error
         self.provider.as_ref().unwrap().decompress(&input)
+    }
+
+    fn decompress_counted(&self, input: Vec<u8>) -> Result<DecompressResult, String> {
+        if let Some(ref error) = self.error {
+            return Err(error.clone());
+        }
+        let (output, consumed) = self
+            .provider
+            .as_ref()
+            .unwrap()
+            .decompress_counted(&input)?;
+        Ok(DecompressResult { output, consumed })
     }
 }
 

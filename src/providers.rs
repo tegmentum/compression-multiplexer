@@ -30,6 +30,17 @@ pub enum Algorithm {
 pub trait CompressionProvider {
     fn compress(&self, input: &[u8], level: u8) -> Result<Vec<u8>, String>;
     fn decompress(&self, input: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// Decompress AND report how many input bytes the stream actually
+    /// consumed. Default impl claims all input as consumed — providers
+    /// whose underlying library exposes a "bytes read" counter (e.g.,
+    /// flate2's `DeflateDecoder::total_in`) should override to report
+    /// the true stream end so callers can recover trailing bytes
+    /// (gzip trailer, next member, etc.) at the right offset.
+    fn decompress_counted(&self, input: &[u8]) -> Result<(Vec<u8>, u64), String> {
+        let out = self.decompress(input)?;
+        Ok((out, input.len() as u64))
+    }
 }
 
 /// Store provider (no compression, pass-through)
@@ -72,6 +83,22 @@ impl CompressionProvider for DeflateProvider {
             .read_to_end(&mut output)
             .map_err(|e| format!("DEFLATE decompression failed: {}", e))?;
         Ok(output)
+    }
+
+    fn decompress_counted(&self, input: &[u8]) -> Result<(Vec<u8>, u64), String> {
+        // flate2's DeflateDecoder exposes `total_in` post-read — the exact
+        // number of input bytes consumed by the deflate stream. That's
+        // what gzip's chunked-transfer parser needs to locate the
+        // 8-byte CRC32+length trailer.
+        use flate2::read::DeflateDecoder;
+
+        let mut decoder = DeflateDecoder::new(input);
+        let mut output = Vec::new();
+        decoder
+            .read_to_end(&mut output)
+            .map_err(|e| format!("DEFLATE decompression failed: {}", e))?;
+        let consumed = decoder.total_in();
+        Ok((output, consumed))
     }
 }
 
