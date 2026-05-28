@@ -202,6 +202,28 @@ pub mod exports {
                         }
                     }
                 }
+                /// Result of decompress-counted — output bytes plus the number of input
+                /// bytes the stream actually consumed. The remaining `input.len() -
+                /// consumed` bytes are unused (trailing trailer, next member, or
+                /// garbage). Lets callers like gzip's chunked-transfer decoder pick
+                /// up the trailer at the right offset without binary-searching the
+                /// stream boundary.
+                #[derive(Clone)]
+                pub struct DecompressResult {
+                    pub output: _rt::Vec<u8>,
+                    pub consumed: u64,
+                }
+                impl ::core::fmt::Debug for DecompressResult {
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        f.debug_struct("DecompressResult")
+                            .field("output", &self.output)
+                            .field("consumed", &self.consumed)
+                            .finish()
+                    }
+                }
                 /// Decompressor resource
                 #[derive(Debug)]
                 #[repr(transparent)]
@@ -493,6 +515,76 @@ pub mod exports {
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
+                pub unsafe fn _export_method_decompressor_decompress_counted_cabi<
+                    T: GuestDecompressor,
+                >(arg0: *mut u8, arg1: *mut u8, arg2: usize) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg2;
+                    let result1 = T::decompress_counted(
+                        unsafe { DecompressorBorrow::lift(arg0 as u32 as usize) }.get(),
+                        _rt::Vec::from_raw_parts(arg1.cast(), len0, len0),
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            let DecompressResult {
+                                output: output3,
+                                consumed: consumed3,
+                            } = e;
+                            let vec4 = (output3).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr2
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr2.add(8).cast::<*mut u8>() = ptr4.cast_mut();
+                            *ptr2
+                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<i64>() = _rt::as_i64(consumed3);
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec5 = (e.into_bytes()).into_boxed_slice();
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            ::core::mem::forget(vec5);
+                            *ptr2
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr2.add(8).cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_method_decompressor_decompress_counted<
+                    T: GuestDecompressor,
+                >(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0.add(8).cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 1, 1);
+                        }
+                        _ => {
+                            let l4 = *arg0.add(8).cast::<*mut u8>();
+                            let l5 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l4, l5, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
                 pub unsafe fn _export_supported_algorithms_cabi<T: Guest>() -> *mut u8 {
                     #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
                     let result0 = T::supported_algorithms();
@@ -715,6 +807,19 @@ pub mod exports {
                         &self,
                         input: _rt::Vec<u8>,
                     ) -> Result<_rt::Vec<u8>, _rt::String>;
+                    /// Decompress data AND report how many input bytes the stream
+                    /// consumed. The provider should report the exact stream end
+                    /// (e.g., for DEFLATE: the byte containing the end-of-block
+                    /// code of the final block, BFINAL=1). If the provider can't
+                    /// distinguish, returns `consumed = input.len()` (all input
+                    /// claimed — caller has no recourse but to trust the boundary).
+                    ///
+                    /// Added in 0.1.x as an additive method; existing consumers
+                    /// using the original `decompress` continue to work unchanged.
+                    fn decompress_counted(
+                        &self,
+                        input: _rt::Vec<u8>,
+                    ) -> Result<DecompressResult, _rt::String>;
                 }
                 #[doc(hidden)]
                 macro_rules! __export_tegmentum_compression_multiplexer_compression_dispatcher_0_1_0_cabi {
@@ -759,6 +864,21 @@ pub mod exports {
                         __post_return_method_decompressor_decompress::<<$ty as
                         $($path_to_types)*:: Guest >::Decompressor > (arg0) } } #[unsafe
                         (export_name =
+                        "tegmentum:compression-multiplexer/compression-dispatcher@0.1.0#[method]decompressor.decompress-counted")]
+                        unsafe extern "C" fn
+                        export_method_decompressor_decompress_counted(arg0 : * mut u8,
+                        arg1 : * mut u8, arg2 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*::
+                        _export_method_decompressor_decompress_counted_cabi::<<$ty as
+                        $($path_to_types)*:: Guest >::Decompressor > (arg0, arg1, arg2) }
+                        } #[unsafe (export_name =
+                        "cabi_post_tegmentum:compression-multiplexer/compression-dispatcher@0.1.0#[method]decompressor.decompress-counted")]
+                        unsafe extern "C" fn
+                        _post_return_method_decompressor_decompress_counted(arg0 : * mut
+                        u8,) { unsafe { $($path_to_types)*::
+                        __post_return_method_decompressor_decompress_counted::<<$ty as
+                        $($path_to_types)*:: Guest >::Decompressor > (arg0) } } #[unsafe
+                        (export_name =
                         "tegmentum:compression-multiplexer/compression-dispatcher@0.1.0#supported-algorithms")]
                         unsafe extern "C" fn export_supported_algorithms() -> * mut u8 {
                         unsafe { $($path_to_types)*::
@@ -792,16 +912,15 @@ pub mod exports {
                 }
                 #[doc(hidden)]
                 pub(crate) use __export_tegmentum_compression_multiplexer_compression_dispatcher_0_1_0_cabi;
-                #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
-                #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                #[repr(align(8))]
                 struct _RetArea(
                     [::core::mem::MaybeUninit<
                         u8,
-                    >; 3 * ::core::mem::size_of::<*const u8>()],
+                    >; 16 + 2 * ::core::mem::size_of::<*const u8>()],
                 );
                 static mut _RET_AREA: _RetArea = _RetArea(
-                    [::core::mem::MaybeUninit::uninit(); 3
-                        * ::core::mem::size_of::<*const u8>()],
+                    [::core::mem::MaybeUninit::uninit(); 16
+                        + 2 * ::core::mem::size_of::<*const u8>()],
                 );
             }
             /// Zstandard-specific extras — dictionary support and dictionary training.
@@ -2075,11 +2194,11 @@ mod _rt {
         }
     }
     pub use alloc_crate::boxed::Box;
+    pub use alloc_crate::vec::Vec;
     #[cfg(target_arch = "wasm32")]
     pub fn run_ctors_once() {
         wit_bindgen_rt::run_ctors_once();
     }
-    pub use alloc_crate::vec::Vec;
     pub unsafe fn cabi_dealloc(ptr: *mut u8, size: usize, align: usize) {
         if size == 0 {
             return;
@@ -2088,6 +2207,29 @@ mod _rt {
         alloc::dealloc(ptr, layout);
     }
     pub use alloc_crate::string::String;
+    pub fn as_i64<T: AsI64>(t: T) -> i64 {
+        t.as_i64()
+    }
+    pub trait AsI64 {
+        fn as_i64(self) -> i64;
+    }
+    impl<'a, T: Copy + AsI64> AsI64 for &'a T {
+        fn as_i64(self) -> i64 {
+            (*self).as_i64()
+        }
+    }
+    impl AsI64 for i64 {
+        #[inline]
+        fn as_i64(self) -> i64 {
+            self as i64
+        }
+    }
+    impl AsI64 for u64 {
+        #[inline]
+        fn as_i64(self) -> i64 {
+            self as i64
+        }
+    }
     pub use alloc_crate::alloc;
     pub fn as_i32<T: AsI32>(t: T) -> i32 {
         t.as_i32()
@@ -2148,29 +2290,6 @@ mod _rt {
             self as i32
         }
     }
-    pub fn as_i64<T: AsI64>(t: T) -> i64 {
-        t.as_i64()
-    }
-    pub trait AsI64 {
-        fn as_i64(self) -> i64;
-    }
-    impl<'a, T: Copy + AsI64> AsI64 for &'a T {
-        fn as_i64(self) -> i64 {
-            (*self).as_i64()
-        }
-    }
-    impl AsI64 for i64 {
-        #[inline]
-        fn as_i64(self) -> i64 {
-            self as i64
-        }
-    }
-    impl AsI64 for u64 {
-        #[inline]
-        fn as_i64(self) -> i64 {
-            self as i64
-        }
-    }
     extern crate alloc as alloc_crate;
 }
 /// Generates `#[unsafe(no_mangle)]` functions to export the specified type as
@@ -2214,36 +2333,38 @@ pub(crate) use __export_compression_multiplexer_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1346] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xb4\x09\x01A\x02\x01\
-A\x04\x01B\x18\x01m\x07\x05store\x07deflate\x05bzip2\x04lzma\x04zstd\x03lz4\x06o\
-penzl\x04\0\x09algorithm\x03\0\0\x04\0\x0acompressor\x03\x01\x04\0\x0cdecompress\
-or\x03\x01\x01i\x02\x01@\x02\x04algo\x01\x05level}\0\x04\x04\0\x17[constructor]c\
-ompressor\x01\x05\x01h\x02\x01p}\x01j\x01\x07\x01s\x01@\x02\x04self\x06\x05input\
-\x07\0\x08\x04\0\x1b[method]compressor.compress\x01\x09\x01i\x03\x01@\x01\x04alg\
-o\x01\0\x0a\x04\0\x19[constructor]decompressor\x01\x0b\x01h\x03\x01@\x02\x04self\
-\x0c\x05input\x07\0\x08\x04\0\x1f[method]decompressor.decompress\x01\x0d\x01p\x01\
-\x01@\0\0\x0e\x04\0\x14supported-algorithms\x01\x0f\x01ks\x01@\x01\x04algo\x01\0\
-\x10\x04\0\x0ealgorithm-info\x01\x11\x04\0>tegmentum:compression-multiplexer/com\
-pression-dispatcher@0.1.0\x05\0\x01B\"\x04\0\x09zstd-dict\x03\x01\x01r\x02\x02id\
-y\x05valuez\x04\0\x0azstd-param\x03\0\x01\x01p}\x01i\0\x01@\x01\x05bytes\x03\0\x04\
-\x04\0\x16[constructor]zstd-dict\x01\x05\x01h\0\x01@\x01\x04self\x06\0y\x04\0\x14\
-[method]zstd-dict.id\x01\x07\x01@\x01\x04self\x06\0\x03\x04\0\x1a[method]zstd-di\
-ct.as-bytes\x01\x08\x01j\x01\x03\x01s\x01@\x03\x05input\x03\x04dict\x06\x05level\
-z\0\x09\x04\0\x12compress-with-dict\x01\x0a\x01@\x02\x05input\x03\x04dict\x06\0\x09\
-\x04\0\x14decompress-with-dict\x01\x0b\x01p\x03\x01@\x02\x07samples\x0c\x09dict-\
-sizey\0\x09\x04\0\x0atrain-dict\x01\x0d\x01@\x04\x0cdict-content\x03\x07samples\x0c\
-\x09dict-sizey\x05levelz\0\x09\x04\0\x0dfinalize-dict\x01\x0e\x01j\x01w\x01s\x01\
-@\x01\x05frame\x03\0\x0f\x04\0\x0eget-frame-size\x01\x10\x01p\x02\x01@\x03\x05in\
-put\x03\x05levelz\x06params\x11\0\x09\x04\0\x11compress-advanced\x01\x12\x01@\x02\
-\x05input\x03\x06params\x11\0\x09\x04\0\x13decompress-advanced\x01\x13\x01@\x04\x05\
-input\x03\x05levelz\x06params\x11\x04dict\x06\0\x09\x04\0\x1bcompress-advanced-w\
-ith-dict\x01\x14\x01@\x03\x05input\x03\x06params\x11\x04dict\x06\0\x09\x04\0\x1d\
-decompress-advanced-with-dict\x01\x15\x04\03tegmentum:compression-multiplexer/zs\
-td-extras@0.1.0\x05\x01\x04\0?tegmentum:compression-multiplexer/compression-mult\
-iplexer@0.1.0\x04\0\x0b\x1d\x01\0\x17compression-multiplexer\x03\0\0\0G\x09produ\
-cers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x06\
-0.41.0";
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1458] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xa4\x0a\x01A\x02\x01\
+A\x04\x01B\x1d\x01m\x07\x05store\x07deflate\x05bzip2\x04lzma\x04zstd\x03lz4\x06o\
+penzl\x04\0\x09algorithm\x03\0\0\x04\0\x0acompressor\x03\x01\x01p}\x01r\x02\x06o\
+utput\x03\x08consumedw\x04\0\x11decompress-result\x03\0\x04\x04\0\x0cdecompresso\
+r\x03\x01\x01i\x02\x01@\x02\x04algo\x01\x05level}\0\x07\x04\0\x17[constructor]co\
+mpressor\x01\x08\x01h\x02\x01j\x01\x03\x01s\x01@\x02\x04self\x09\x05input\x03\0\x0a\
+\x04\0\x1b[method]compressor.compress\x01\x0b\x01i\x06\x01@\x01\x04algo\x01\0\x0c\
+\x04\0\x19[constructor]decompressor\x01\x0d\x01h\x06\x01@\x02\x04self\x0e\x05inp\
+ut\x03\0\x0a\x04\0\x1f[method]decompressor.decompress\x01\x0f\x01j\x01\x05\x01s\x01\
+@\x02\x04self\x0e\x05input\x03\0\x10\x04\0'[method]decompressor.decompress-count\
+ed\x01\x11\x01p\x01\x01@\0\0\x12\x04\0\x14supported-algorithms\x01\x13\x01ks\x01\
+@\x01\x04algo\x01\0\x14\x04\0\x0ealgorithm-info\x01\x15\x04\0>tegmentum:compress\
+ion-multiplexer/compression-dispatcher@0.1.0\x05\0\x01B\"\x04\0\x09zstd-dict\x03\
+\x01\x01r\x02\x02idy\x05valuez\x04\0\x0azstd-param\x03\0\x01\x01p}\x01i\0\x01@\x01\
+\x05bytes\x03\0\x04\x04\0\x16[constructor]zstd-dict\x01\x05\x01h\0\x01@\x01\x04s\
+elf\x06\0y\x04\0\x14[method]zstd-dict.id\x01\x07\x01@\x01\x04self\x06\0\x03\x04\0\
+\x1a[method]zstd-dict.as-bytes\x01\x08\x01j\x01\x03\x01s\x01@\x03\x05input\x03\x04\
+dict\x06\x05levelz\0\x09\x04\0\x12compress-with-dict\x01\x0a\x01@\x02\x05input\x03\
+\x04dict\x06\0\x09\x04\0\x14decompress-with-dict\x01\x0b\x01p\x03\x01@\x02\x07sa\
+mples\x0c\x09dict-sizey\0\x09\x04\0\x0atrain-dict\x01\x0d\x01@\x04\x0cdict-conte\
+nt\x03\x07samples\x0c\x09dict-sizey\x05levelz\0\x09\x04\0\x0dfinalize-dict\x01\x0e\
+\x01j\x01w\x01s\x01@\x01\x05frame\x03\0\x0f\x04\0\x0eget-frame-size\x01\x10\x01p\
+\x02\x01@\x03\x05input\x03\x05levelz\x06params\x11\0\x09\x04\0\x11compress-advan\
+ced\x01\x12\x01@\x02\x05input\x03\x06params\x11\0\x09\x04\0\x13decompress-advanc\
+ed\x01\x13\x01@\x04\x05input\x03\x05levelz\x06params\x11\x04dict\x06\0\x09\x04\0\
+\x1bcompress-advanced-with-dict\x01\x14\x01@\x03\x05input\x03\x06params\x11\x04d\
+ict\x06\0\x09\x04\0\x1ddecompress-advanced-with-dict\x01\x15\x04\03tegmentum:com\
+pression-multiplexer/zstd-extras@0.1.0\x05\x01\x04\0?tegmentum:compression-multi\
+plexer/compression-multiplexer@0.1.0\x04\0\x0b\x1d\x01\0\x17compression-multiple\
+xer\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10\
+wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {
