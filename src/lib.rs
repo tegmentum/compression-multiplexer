@@ -4,11 +4,17 @@
 // On WASM targets, exports Component Model interface.
 // On native targets, provides library access to compression providers.
 
-#[cfg(target_family = "wasm")]
+// The WIT component surface (bindings + dispatcher + zstd-extras dict training
+// + the export!) is gated behind the `component` feature rather than
+// `target_family = "wasm"`, so a consumer that only needs the `providers` Rust
+// API on wasm — e.g. the `compress` extension — does not drag in the WIT layer
+// (and therefore does not statically link libzstd via zstd-extras). The
+// standalone multiplexer component builds with `--features component`.
+#[cfg(feature = "component")]
 mod bindings;
-#[cfg(target_family = "wasm")]
+#[cfg(feature = "component")]
 mod dispatcher;
-#[cfg(target_family = "wasm")]
+#[cfg(feature = "component")]
 mod zstd_extras;
 
 mod openzl_ffi;
@@ -17,11 +23,11 @@ pub mod providers;
 // Re-export for convenience
 pub use providers::{CompressionProvider, Algorithm};
 
-#[cfg(target_family = "wasm")]
+#[cfg(feature = "component")]
 pub use dispatcher::{Compressor, Decompressor, MultiplexerImpl};
 
-// Export the WIT bindings for WASM targets
-#[cfg(target_family = "wasm")]
+// Export the WIT bindings for the standalone component build.
+#[cfg(feature = "component")]
 bindings::export!(MultiplexerImpl with_types_in bindings);
 
 #[cfg(test)]

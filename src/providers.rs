@@ -214,9 +214,13 @@ impl CompressionProvider for Lz4Provider {
     }
 }
 
-/// Zstd provider (Zstandard compression)
+/// Zstd provider (Zstandard compression). Gated behind the `zstd` feature so
+/// consumers that don't need zstd (the `compress` extension) don't link
+/// libzstd; `get_provider(Zstd)` returns an error when the feature is off.
+#[cfg(feature = "zstd")]
 pub struct ZstdProvider;
 
+#[cfg(feature = "zstd")]
 impl CompressionProvider for ZstdProvider {
     fn compress(&self, input: &[u8], level: u8) -> Result<Vec<u8>, String> {
         // Zstd supports levels 1-22, map 0-9 to 1-19
@@ -347,7 +351,12 @@ pub fn get_provider(algorithm: Algorithm) -> Result<Box<dyn CompressionProvider>
         Algorithm::Deflate => Ok(Box::new(DeflateProvider)),
         Algorithm::Bzip2 => Ok(Box::new(Bzip2Provider)),
         Algorithm::Lzma => Ok(Box::new(LzmaProvider)),
+        #[cfg(feature = "zstd")]
         Algorithm::Zstd => Ok(Box::new(ZstdProvider)),
+        #[cfg(not(feature = "zstd"))]
+        Algorithm::Zstd => {
+            Err("Zstandard support not compiled in (enable the `zstd` feature)".to_string())
+        }
         Algorithm::Lz4 => Ok(Box::new(Lz4Provider)),
         #[cfg(target_family = "wasm")]
         Algorithm::Openzl => Ok(Box::new(OpenZlProvider)),
@@ -446,6 +455,7 @@ mod tests {
         assert!(get_provider(Algorithm::Deflate).is_ok());
         assert!(get_provider(Algorithm::Bzip2).is_ok());
         assert!(get_provider(Algorithm::Lzma).is_ok());
+        #[cfg(feature = "zstd")]
         assert!(get_provider(Algorithm::Zstd).is_ok());
         assert!(get_provider(Algorithm::Lz4).is_ok());
         // OpenZL is only available on WASM
@@ -477,6 +487,7 @@ mod tests {
         assert_eq!(decompressed, data);
     }
 
+    #[cfg(feature = "zstd")]
     #[test]
     fn test_zstd_provider() {
         let provider = ZstdProvider;

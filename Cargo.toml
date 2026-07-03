@@ -14,9 +14,15 @@ build = "build.rs"
 crate-type = ["rlib", "cdylib"]
 
 [features]
-default = []
-# Enable WebAssembly Component Model support (adds cdylib output)
-component = []
+default = ["zstd"]
+# The standalone WIT component surface (bindings + dispatcher + zstd-extras
+# dict training + the export!). Implies zstd. Build the multiplexer component
+# with `--features component`.
+component = ["zstd"]
+# libzstd-backed Zstandard algorithm + the zstd-extras dict-training surface.
+# On by default; a consumer that doesn't need zstd (the `compress` extension,
+# via `default-features = false`) drops it and avoids statically linking libzstd.
+zstd = ["dep:zstd"]
 
 [dependencies]
 # Compression implementations
@@ -25,7 +31,7 @@ bzip2-rs = "0.1"
 banzai = "0.1"
 lzma-rust2 = "0.15"
 lz4_flex = "0.11"
-zstd = { version = "0.13", default-features = false, features = ["zdict_builder"] }
+zstd = { version = "0.13", default-features = false, features = ["zdict_builder"], optional = true }
 
 # WIT bindings (optional for native library use)
 wit-bindgen = { version = "0.44", default-features = false, features = ["realloc"], optional = true }
@@ -38,7 +44,7 @@ wit-bindgen-rt = { version = "0.44", default-features = false, features = ["bitf
 # wasm. Feature-unioned with the native dep above (so native keeps the asm).
 # Requires the wasip1 wasi-sdk CC/AR/CFLAGS env (cargo-component builds the
 # core as wasm32-wasip1); see extensions/zstd/Cargo.toml.
-zstd = { version = "0.13", default-features = false, features = ["wasm", "zdict_builder", "no_asm"] }
+zstd = { version = "0.13", default-features = false, features = ["wasm", "zdict_builder", "no_asm"], optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
