@@ -34,7 +34,11 @@ wit-bindgen-rt = { version = "0.44", default-features = false, features = ["bitf
 [target.'cfg(target_family = "wasm")'.dependencies]
 wit-bindgen = { version = "0.44", default-features = false, features = ["realloc"] }
 wit-bindgen-rt = { version = "0.44", default-features = false, features = ["bitflags"] }
-zstd = { version = "0.13", default-features = false, features = ["wasm", "zdict_builder"] }
+# `no_asm` skips zstd's x86 huf_decompress_amd64.S, which can't assemble for
+# wasm. Feature-unioned with the native dep above (so native keeps the asm).
+# Requires the wasip1 wasi-sdk CC/AR/CFLAGS env (cargo-component builds the
+# core as wasm32-wasip1); see extensions/zstd/Cargo.toml.
+zstd = { version = "0.13", default-features = false, features = ["wasm", "zdict_builder", "no_asm"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
