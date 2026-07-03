@@ -6,6 +6,10 @@
 //
 // This is a simplified mock-up showing the pattern.
 
+// Demo scaffolding: some constructors exist for illustration but aren't all
+// exercised by `main`.
+#![allow(dead_code)]
+
 use compression_multiplexer::providers::{get_provider, Algorithm};
 
 /// Mock ZIP entry representing a file in an archive
@@ -56,6 +60,8 @@ impl ZipProvider {
             Algorithm::Bzip2 => 12,   // BZIP2
             Algorithm::Lzma => 14,    // LZMA
             Algorithm::Zstd => 93,    // Zstandard (unofficial)
+            Algorithm::Lz4 => 200,    // LZ4 (unofficial method code — demo only)
+            Algorithm::Openzl => 201, // OpenZL (unofficial method code — demo only)
         };
 
         // Use compression multiplexer to compress the data

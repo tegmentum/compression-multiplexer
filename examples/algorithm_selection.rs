@@ -50,7 +50,7 @@ fn main() -> Result<(), String> {
                 continue;
             }
 
-            let (compressed_size, report) = compress_and_report(&data, algorithm, 6)?;
+            let (_compressed_size, report) = compress_and_report(&data, algorithm, 6)?;
             println!("  {}", report);
         }
 

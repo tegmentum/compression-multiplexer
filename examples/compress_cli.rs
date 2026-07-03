@@ -121,14 +121,18 @@ fn main() {
             } else {
                 let input = &args[2];
                 let output = &args[4];
-                let algorithm = parse_algorithm(&args[6])?;
-                let level = if args.len() >= 9 && args[7] == "-l" {
-                    args[8].parse::<u8>().unwrap_or(6)
-                } else {
-                    6
-                };
-
-                compress_file(input, output, algorithm, level)
+                // `main` returns `()`, so thread the Result rather than `?`.
+                match parse_algorithm(&args[6]) {
+                    Ok(algorithm) => {
+                        let level = if args.len() >= 9 && args[7] == "-l" {
+                            args[8].parse::<u8>().unwrap_or(6)
+                        } else {
+                            6
+                        };
+                        compress_file(input, output, algorithm, level)
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
         "decompress" => {
@@ -137,9 +141,10 @@ fn main() {
             } else {
                 let input = &args[2];
                 let output = &args[4];
-                let algorithm = parse_algorithm(&args[6])?;
-
-                decompress_file(input, output, algorithm)
+                match parse_algorithm(&args[6]) {
+                    Ok(algorithm) => decompress_file(input, output, algorithm),
+                    Err(e) => Err(e),
+                }
             }
         }
         "info" => {
